@@ -1,0 +1,38 @@
+{
+  "customers": [
+    {
+        "id": 1, "name": "سارا و علی محمدی", "phoneNumber": "09121234567", "status": "Searching", "createdAt": "2023-10-01T10:00:00Z",
+        "requirements": {
+            "transactionType": "Sale", "propertyType": "آپارتمان", "neighborhoods": ["پونک", "جنت‌آباد"], "minArea": 80, "maxArea": 100, "bedrooms": 2, "budget": 5000000000,
+            "features": ["نورگیر", "دسترسی به مترو"], "notes": "زوج جوان، به دنبال اولین خانه. آپارتمان دو خوابه در پونک یا جنت‌آباد. محیط آرام و دسترسی به مترو مهم است. بودجه حداکثر ۵ میلیارد.",
+            "tags": ["زوج جوان", "خونه اولی", "محیط آرام"]
+        },
+        "interactions": [ { "id": 1, "type": "Call", "date": "2023-10-01T10:00:00Z", "notes": "تماس اولیه جهت آشنایی." } ]
+    },
+    {
+        "id": 6, "name": "مریم حسینی", "phoneNumber": "09129876543", "status": "Active", "createdAt": "2023-10-10T11:00:00Z",
+        "requirements": {
+            "transactionType": "Rent", "propertyType": "آپارتمان", "neighborhoods": ["مرزداران", "ستارخان"], "minArea": 70, "maxArea": 90, "bedrooms": 2, "maxRahn": 500000000, "maxRent": 15000000,
+            "features": ["آسانسور", "پارکینگ"], "notes": "به دنبال یک واحد آپارتمان برای رهن و اجاره در منطقه مرزداران. دو خوابه با پارکینگ و آسانسور ضروری است. حداکثر رهن ۵۰۰ میلیون و اجاره ۱۵ میلیون.",
+            "tags": ["اجاره", "کارمند", "دسترسی خوب"]
+        },
+        "interactions": []
+    }
+  ],
+  "properties": [
+    {
+        "id": 101, "title": "پنت‌هاوس رویایی با ویو ۳۶۰ درجه در جردن", "address": "جردن، برج آفتاب، طبقه ۲۰", "transactionType": "Sale",
+        "propertyType": "پنت‌هاوس", "area": 350, "bedrooms": 4, "price": 85000000000, "features": ["استخر خصوصی", "سونا", "ویو ابدی", "لابی مجلل"],
+        "description": "واحد پنت‌هاوس بی‌نظیر مناسب برای افراد خاص.", "createdAt": "2023-09-25T10:00:00Z"
+    },
+    {
+        "id": 106, "title": "۸۰ متر خوش‌نقشه اجاره‌ای در ستارخان", "address": "ستارخان، خیابان شادمان", "transactionType": "Rent",
+        "propertyType": "آپارتمان", "area": 80, "bedrooms": 2, "rahn": 450000000, "rent": 12000000, "features": ["آسانسور", "پارکینگ", "انباری", "نورگیر"],
+        "description": "واحدی تمیز و بازسازی شده در محله‌ای آرام با دسترسی عالی. مناسب برای زوج‌ها یا خانواده‌های کوچک.", "createdAt": "2023-10-08T18:00:00Z"
+    }
+  ],
+  "tasks": [
+    { "id": 201, "title": "تماس با خانواده رضایی جهت معرفی پنت‌هاوس جردن", "dueDate": "2024-08-13", "priority": "High", "isCompleted": false, "customerId": 2, "createdAt": "2024-08-12T14:47:32.331Z" },
+    { "id": 202, "title": "پیگیری اجاره خانم حسینی", "dueDate": "2024-08-14", "priority": "Medium", "isCompleted": false, "customerId": 6, "createdAt": "2024-08-12T14:47:32.331Z" }
+  ]
+}

@@ -18,48 +18,6 @@ import CogIcon from './components/icons/CogIcon';
 import Settings from './components/Settings';
 import { initDB, addDocument, customerToDocument, propertyToDocument, deleteDocument } from './services/ragService';
 
-const initialCustomers: Customer[] = [
-    {
-        id: 1, name: 'سارا و علی محمدی', phoneNumber: '09121234567', status: CustomerStatus.Searching, createdAt: '2023-10-01T10:00:00Z',
-        requirements: {
-            transactionType: TransactionType.Sale, propertyType: 'آپارتمان', neighborhoods: ['پونک', 'جنت‌آباد'], minArea: 80, maxArea: 100, bedrooms: 2, budget: 5000000000,
-            features: ['نورگیر', 'دسترسی به مترو'], notes: "زوج جوان، به دنبال اولین خانه. آپارتمان دو خوابه در پونک یا جنت‌آباد. محیط آرام و دسترسی به مترو مهم است. بودجه حداکثر ۵ میلیارد.",
-            tags: ["زوج جوان", "خونه اولی", "محیط آرام"],
-        },
-        interactions: [ { id: 1, type: InteractionType.Call, date: '2023-10-01T10:00:00Z', notes: 'تماس اولیه جهت آشنایی.' } ],
-    },
-    {
-        id: 6, name: 'مریم حسینی', phoneNumber: '09129876543', status: CustomerStatus.Active, createdAt: '2023-10-10T11:00:00Z',
-        requirements: {
-            transactionType: TransactionType.Rent, propertyType: 'آپارتمان', neighborhoods: ['مرزداران', 'ستارخان'], minArea: 70, maxArea: 90, bedrooms: 2, maxRahn: 500000000, maxRent: 15000000,
-            features: ['آسانسور', 'پارکینگ'], notes: "به دنبال یک واحد آپارتمان برای رهن و اجاره در منطقه مرزداران. دو خوابه با پارکینگ و آسانسور ضروری است. حداکثر رهن ۵۰۰ میلیون و اجاره ۱۵ میلیون.",
-            tags: ["اجاره", "کارمند", "دسترسی خوب"],
-        },
-        interactions: [],
-    },
-];
-
-const initialProperties: Property[] = [
-    {
-        id: 101, title: "پنت‌هاوس رویایی با ویو ۳۶۰ درجه در جردن", address: "جردن، برج آفتاب، طبقه ۲۰", transactionType: TransactionType.Sale,
-        propertyType: "پنت‌هاوس", area: 350, bedrooms: 4, price: 85000000000, features: ["استخر خصوصی", "سونا", "ویو ابدی", "لابی مجلل"],
-        description: "واحد پنت‌هاوس بی‌نظیر مناسب برای افراد خاص.", createdAt: '2023-09-25T10:00:00Z',
-    },
-    {
-        id: 106, title: "۸۰ متر خوش‌نقشه اجاره‌ای در ستارخان", address: "ستارخان، خیابان شادمان", transactionType: TransactionType.Rent,
-        propertyType: "آپارتمان", area: 80, bedrooms: 2, rahn: 450000000, rent: 12000000, features: ["آسانسور", "پارکینگ", "انباری", "نورگیر"],
-        description: "واحدی تمیز و بازسازی شده در محله‌ای آرام با دسترسی عالی. مناسب برای زوج‌ها یا خانواده‌های کوچک.", createdAt: '2023-10-08T18:00:00Z',
-    },
-];
-
-const initialTasks: Task[] = [
-    { id: 201, title: "تماس با خانواده رضایی جهت معرفی پنت‌هاوس جردن", dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], priority: TaskPriority.High, isCompleted: false, customerId: 2, createdAt: new Date().toISOString() },
-    { id: 202, title: "پیگیری اجاره خانم حسینی", dueDate: new Date(Date.now() + 172800000).toISOString().split('T')[0], priority: TaskPriority.Medium, isCompleted: false, customerId: 6, createdAt: new Date().toISOString() },
-];
-
-const CUSTOMER_STORAGE_KEY = 'smart-crm-customers-v3';
-const PROPERTY_STORAGE_KEY = 'smart-crm-properties-v3';
-const TASK_STORAGE_KEY = 'smart-crm-tasks-v3';
 const API_KEYS_STORAGE_KEY = 'smart-crm-api-keys-v1';
 
 const emptyCustomerReq: Requirement = { transactionType: TransactionType.Sale, propertyType: '', neighborhoods: [], minArea: 0, maxArea: 0, bedrooms: 0, features: [], notes: '', tags: [] };
@@ -67,9 +25,9 @@ const emptyPropertyData: Omit<Property, 'id' | 'createdAt'> = { title: '', addre
 
 
 const App: React.FC = () => {
-    const [customers, setCustomers] = useState<Customer[]>(() => JSON.parse(window.localStorage.getItem(CUSTOMER_STORAGE_KEY) || 'null') || initialCustomers);
-    const [properties, setProperties] = useState<Property[]>(() => JSON.parse(window.localStorage.getItem(PROPERTY_STORAGE_KEY) || 'null') || initialProperties);
-    const [tasks, setTasks] = useState<Task[]>(() => JSON.parse(window.localStorage.getItem(TASK_STORAGE_KEY) || 'null') || initialTasks);
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [properties, setProperties] = useState<Property[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]);
     const [apiKeys, setApiKeys] = useState<string[]>(() => JSON.parse(window.localStorage.getItem(API_KEYS_STORAGE_KEY) || 'null') || []);
 
     const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
@@ -89,32 +47,46 @@ const App: React.FC = () => {
     const [isRagInitialized, setIsRagInitialized] = useState(false);
 
     useEffect(() => {
-        const initialize = async () => {
-            await initDB();
-            setIsRagInitialized(true);
-        };
-        initialize();
-    }, []);
+        const initializeApp = async () => {
+            try {
+                // 1. Fetch data
+                const customersRes = await fetch('http://localhost:3001/api/customers');
+                const propertiesRes = await fetch('http://localhost:3001/api/properties');
+                const tasksRes = await fetch('http://localhost:3001/api/tasks');
 
-    useEffect(() => {
-        if (isRagInitialized) {
-            const indexData = async () => {
+                const customersData = await customersRes.json();
+                const propertiesData = await propertiesRes.json();
+                const tasksData = await tasksRes.json();
+
+                // 2. Set state
+                setCustomers(customersData);
+                setProperties(propertiesData);
+                setTasks(tasksData);
+
+                // 3. Init DB
+                await initDB();
+
+                // 4. Index data
                 console.log('Indexing existing data...');
-                for (const customer of customers) {
+                for (const customer of customersData) {
                     await addDocument(customerToDocument(customer));
                 }
-                for (const property of properties) {
+                for (const property of propertiesData) {
                     await addDocument(propertyToDocument(property));
                 }
                 console.log('Finished indexing existing data.');
-            };
-            indexData();
-        }
-    }, [isRagInitialized]);
 
-    useEffect(() => { window.localStorage.setItem(CUSTOMER_STORAGE_KEY, JSON.stringify(customers)); }, [customers]);
-    useEffect(() => { window.localStorage.setItem(PROPERTY_STORAGE_KEY, JSON.stringify(properties)); }, [properties]);
-    useEffect(() => { window.localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks)); }, [tasks]);
+                // 5. Set initialized
+                setIsRagInitialized(true);
+
+            } catch (error) {
+                console.error("Failed to initialize the application:", error);
+            }
+        };
+
+        initializeApp();
+    }, []); // Runs only once on mount
+
     useEffect(() => { window.localStorage.setItem(API_KEYS_STORAGE_KEY, JSON.stringify(apiKeys)); }, [apiKeys]);
 
     useEffect(() => {
@@ -145,37 +117,75 @@ const App: React.FC = () => {
     // Customer Handlers
     const handleSelectCustomer = (id: number) => { setSelectedCustomerId(id); setSelectedPropertyId(null); setView('customer_form'); };
     const handleAddCustomerClick = () => { setSelectedCustomerId(null); setSelectedPropertyId(null); setView('customer_form'); };
-    const handleSaveCustomer = (customerData: Customer) => {
-        setCustomers(prev => {
-            const existingIndex = prev.findIndex(c => c.id === customerData.id);
-            const newCustomers = existingIndex > -1 ? Object.assign([], prev, {[existingIndex]: customerData}) : [...prev, customerData];
-            if (isRagInitialized) addDocument(customerToDocument(customerData));
-            return newCustomers;
-        });
-        setView('customer_form');
+    const handleSaveCustomer = async (customerData: Customer) => {
+        const isNew = !customerData.id;
+        const url = isNew ? 'http://localhost:3001/api/customers' : `http://localhost:3001/api/customers/${customerData.id}`;
+        const method = isNew ? 'POST' : 'PUT';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(customerData),
+            });
+            const savedCustomer = await response.json();
+
+            setCustomers(prev => {
+                const newCustomers = isNew ? [...prev, savedCustomer] : prev.map(c => c.id === savedCustomer.id ? savedCustomer : c);
+                if (isRagInitialized) addDocument(customerToDocument(savedCustomer));
+                return newCustomers;
+            });
+            setView('customer_form');
+        } catch (error) {
+            console.error("Failed to save customer:", error);
+        }
     };
-    const handleDeleteCustomer = (customerId: number) => {
-        setCustomers(prev => prev.filter(c => c.id !== customerId));
-        if (isRagInitialized) deleteDocument(`customer-${customerId}`);
-        handleBackToDashboard();
+    const handleDeleteCustomer = async (customerId: number) => {
+        try {
+            await fetch(`http://localhost:3001/api/customers/${customerId}`, { method: 'DELETE' });
+            setCustomers(prev => prev.filter(c => c.id !== customerId));
+            if (isRagInitialized) deleteDocument(`customer-${customerId}`);
+            handleBackToDashboard();
+        } catch (error) {
+            console.error("Failed to delete customer:", error);
+        }
     };
 
     // Property Handlers
     const handleSelectProperty = (id: number) => { setSelectedPropertyId(id); setSelectedCustomerId(null); setView('property_form'); };
     const handleAddPropertyClick = () => { setSelectedPropertyId(null); setSelectedCustomerId(null); setView('property_form'); };
-    const handleSaveProperty = (propertyData: Property) => {
-        setProperties(prev => {
-            const existingIndex = prev.findIndex(p => p.id === propertyData.id);
-            const newProperties = existingIndex > -1 ? Object.assign([], prev, {[existingIndex]: propertyData}) : [...prev, propertyData];
-            if (isRagInitialized) addDocument(propertyToDocument(propertyData));
-            return newProperties;
-        });
-        setView('property_form');
+    const handleSaveProperty = async (propertyData: Property) => {
+        const isNew = !propertyData.id;
+        const url = isNew ? 'http://localhost:3001/api/properties' : `http://localhost:3001/api/properties/${propertyData.id}`;
+        const method = isNew ? 'POST' : 'PUT';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(propertyData),
+            });
+            const savedProperty = await response.json();
+
+            setProperties(prev => {
+                const newProperties = isNew ? [...prev, savedProperty] : prev.map(p => p.id === savedProperty.id ? savedProperty : p);
+                if (isRagInitialized) addDocument(propertyToDocument(savedProperty));
+                return newProperties;
+            });
+            setView('property_form');
+        } catch (error) {
+            console.error("Failed to save property:", error);
+        }
     };
-    const handleDeleteProperty = (propertyId: number) => {
-        setProperties(prev => prev.filter(p => p.id !== propertyId));
-        if (isRagInitialized) deleteDocument(`property-${propertyId}`);
-        handleBackToDashboard();
+    const handleDeleteProperty = async (propertyId: number) => {
+        try {
+            await fetch(`http://localhost:3001/api/properties/${propertyId}`, { method: 'DELETE' });
+            setProperties(prev => prev.filter(p => p.id !== propertyId));
+            if (isRagInitialized) deleteDocument(`property-${propertyId}`);
+            handleBackToDashboard();
+        } catch (error) {
+            console.error("Failed to delete property:", error);
+        }
     };
 
     // Local Fallback Search
@@ -271,14 +281,52 @@ const App: React.FC = () => {
     // Task & Calendar Handlers
     const handleViewTasks = () => setView('task_manager');
     const handleViewCalendar = () => setView('calendar');
-    const handleSaveTask = (task: Task) => {
-        setTasks(prev => {
-            const existingIndex = prev.findIndex(t => t.id === task.id);
-            return existingIndex > -1 ? Object.assign([], prev, {[existingIndex]: task}) : [...prev, task];
-        });
+    const handleSaveTask = async (task: Task) => {
+        const isNew = !task.id;
+        const url = isNew ? 'http://localhost:3001/api/tasks' : `http://localhost:3001/api/tasks/${task.id}`;
+        const method = isNew ? 'POST' : 'PUT';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(task),
+            });
+            const savedTask = await response.json();
+
+            setTasks(prev => {
+                return isNew ? [...prev, savedTask] : prev.map(t => t.id === savedTask.id ? savedTask : t);
+            });
+        } catch (error) {
+            console.error("Failed to save task:", error);
+        }
     };
-    const handleDeleteTask = (taskId: number) => setTasks(prev => prev.filter(t => t.id !== taskId));
-    const handleToggleTask = (taskId: number) => setTasks(prev => prev.map(t => t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t));
+    const handleDeleteTask = async (taskId: number) => {
+        try {
+            await fetch(`http://localhost:3001/api/tasks/${taskId}`, { method: 'DELETE' });
+            setTasks(prev => prev.filter(t => t.id !== taskId));
+        } catch (error) {
+            console.error("Failed to delete task:", error);
+        }
+    };
+    const handleToggleTask = async (taskId: number) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const updatedTask = { ...task, isCompleted: !task.isCompleted };
+
+        try {
+            const response = await fetch(`http://localhost:3001/api/tasks/${taskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedTask),
+            });
+            const savedTask = await response.json();
+            setTasks(prev => prev.map(t => t.id === savedTask.id ? savedTask : t));
+        } catch (error) {
+            console.error("Failed to toggle task:", error);
+        }
+    };
 
     // AI Copilot Handler
     const handleSendMessageToCopilot = useCallback(async (message: string) => {
