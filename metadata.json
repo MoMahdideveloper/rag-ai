@@ -1,0 +1,6 @@
+{
+  "name": "Copy of Smart Real Estate CRM with Gemini",
+  "description": "An intelligent CRM for real estate agents to manage clients and their requirements, using the Gemini API to filter, categorize, and find the perfect property for each client.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
