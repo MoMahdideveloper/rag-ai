@@ -39,8 +39,33 @@ const Task = sequelize.define('Task', {
     createdAt: { type: DataTypes.DATE }
 }, { timestamps: false });
 
+const User = sequelize.define('User', {
+    email: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true,
+        validate: {
+            isEmail: true
+        }
+    },
+    password: {
+        type: DataTypes.STRING,
+        allowNull: false
+    }
+});
+
+User.hasMany(Customer);
+Customer.belongsTo(User);
+
+User.hasMany(Property);
+Property.belongsTo(User);
+
+User.hasMany(Task);
+Task.belongsTo(User);
+
 module.exports = {
     sequelize,
+    User,
     Customer,
     Property,
     Task

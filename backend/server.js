@@ -1,8 +1,12 @@
 const express = require('express');
 const cors = require('cors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { sequelize, User, Customer, Property, Task } = require('./database');
 
 const app = express();
 const PORT = 3001;
+const JWT_SECRET = 'your-super-secret-key-that-should-be-in-an-env-file';
 
 app.use(cors());
 app.use(express.json());
@@ -12,28 +16,80 @@ app.get('/', (req, res) => {
     res.send('Real Estate CRM Backend is running!');
 });
 
-// Customer routes
-app.get('/api/customers', async (req, res) => {
+// Auth routes
+app.post('/api/register', async (req, res) => {
     try {
-        const customers = await Customer.findAll();
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = await User.create({ email, password: hashedPassword });
+        res.status(201).json({ message: 'User created successfully', userId: user.id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+        const user = await User.findOne({ where: { email } });
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+        res.json({ token });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (token == null) return res.sendStatus(401); // if there isn't any token
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
+
+// Customer routes
+app.get('/api/customers', authenticateToken, async (req, res) => {
+    try {
+        const customers = await Customer.findAll({ where: { UserId: req.user.id } });
         res.json(customers);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.post('/api/customers', async (req, res) => {
+app.post('/api/customers', authenticateToken, async (req, res) => {
     try {
-        const newCustomer = await Customer.create(req.body);
+        const newCustomer = await Customer.create({ ...req.body, UserId: req.user.id });
         res.status(201).json(newCustomer);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.put('/api/customers/:id', async (req, res) => {
+app.put('/api/customers/:id', authenticateToken, async (req, res) => {
     try {
-        const customer = await Customer.findByPk(req.params.id);
+        const customer = await Customer.findOne({ where: { id: req.params.id, UserId: req.user.id } });
         if (customer) {
             await customer.update(req.body);
             res.json(customer);
@@ -45,10 +101,10 @@ app.put('/api/customers/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/customers/:id', async (req, res) => {
+app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
     try {
         const deleted = await Customer.destroy({
-            where: { id: req.params.id }
+            where: { id: req.params.id, UserId: req.user.id }
         });
         if (deleted) {
             res.status(204).send();
@@ -61,27 +117,27 @@ app.delete('/api/customers/:id', async (req, res) => {
 });
 
 // Property routes
-app.get('/api/properties', async (req, res) => {
+app.get('/api/properties', authenticateToken, async (req, res) => {
     try {
-        const properties = await Property.findAll();
+        const properties = await Property.findAll({ where: { UserId: req.user.id } });
         res.json(properties);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.post('/api/properties', async (req, res) => {
+app.post('/api/properties', authenticateToken, async (req, res) => {
     try {
-        const newProperty = await Property.create(req.body);
+        const newProperty = await Property.create({ ...req.body, UserId: req.user.id });
         res.status(201).json(newProperty);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.put('/api/properties/:id', async (req, res) => {
+app.put('/api/properties/:id', authenticateToken, async (req, res) => {
     try {
-        const property = await Property.findByPk(req.params.id);
+        const property = await Property.findOne({ where: { id: req.params.id, UserId: req.user.id } });
         if (property) {
             await property.update(req.body);
             res.json(property);
@@ -93,10 +149,10 @@ app.put('/api/properties/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/properties/:id', async (req, res) => {
+app.delete('/api/properties/:id', authenticateToken, async (req, res) => {
     try {
         const deleted = await Property.destroy({
-            where: { id: req.params.id }
+            where: { id: req.params.id, UserId: req.user.id }
         });
         if (deleted) {
             res.status(204).send();
@@ -109,27 +165,27 @@ app.delete('/api/properties/:id', async (req, res) => {
 });
 
 // Task routes
-app.get('/api/tasks', async (req, res) => {
+app.get('/api/tasks', authenticateToken, async (req, res) => {
     try {
-        const tasks = await Task.findAll();
+        const tasks = await Task.findAll({ where: { UserId: req.user.id } });
         res.json(tasks);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.post('/api/tasks', async (req, res) => {
+app.post('/api/tasks', authenticateToken, async (req, res) => {
     try {
-        const newTask = await Task.create(req.body);
+        const newTask = await Task.create({ ...req.body, UserId: req.user.id });
         res.status(201).json(newTask);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-app.put('/api/tasks/:id', async (req, res) => {
+app.put('/api/tasks/:id', authenticateToken, async (req, res) => {
     try {
-        const task = await Task.findByPk(req.params.id);
+        const task = await Task.findOne({ where: { id: req.params.id, UserId: req.user.id } });
         if (task) {
             await task.update(req.body);
             res.json(task);
@@ -141,10 +197,10 @@ app.put('/api/tasks/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/tasks/:id', async (req, res) => {
+app.delete('/api/tasks/:id', authenticateToken, async (req, res) => {
     try {
         const deleted = await Task.destroy({
-            where: { id: req.params.id }
+            where: { id: req.params.id, UserId: req.user.id }
         });
         if (deleted) {
             res.status(204).send();
@@ -155,8 +211,6 @@ app.delete('/api/tasks/:id', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
-const { sequelize, Customer, Property, Task } = require('./database');
 
 const startServer = async () => {
     try {
