@@ -233,7 +233,8 @@ export const getAiCopilotResponse = async (
     apiKeys: string[],
     history: ChatMessage[],
     query: string,
-    token: string | null
+    token: string | null,
+    teamId: number | null
 ): Promise<string> => {
     const conversationHistoryForApi = history.map(msg => ({
         role: msg.role,
@@ -243,7 +244,7 @@ export const getAiCopilotResponse = async (
     // 1. Get context from backend RAG service
     let context = "No context was retrieved from the CRM.";
     try {
-        const ragResponse = await api.post('/api/rag-search', { query }, token);
+        const ragResponse = await api.post('/api/rag-search', { query, teamId }, token);
         if (ragResponse.context && ragResponse.context.length > 0) {
             context = ragResponse.context.join('\n\n');
         }

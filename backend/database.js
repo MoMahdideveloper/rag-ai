@@ -54,11 +54,22 @@ const User = sequelize.define('User', {
     }
 });
 
-User.hasMany(Customer);
-Customer.belongsTo(User);
+const Team = sequelize.define('Team', {
+    name: {
+        type: DataTypes.STRING,
+        allowNull: false
+    }
+});
 
-User.hasMany(Property);
-Property.belongsTo(User);
+// Associations
+User.belongsToMany(Team, { through: 'UserTeam' });
+Team.belongsToMany(User, { through: 'UserTeam' });
+
+Team.hasMany(Customer);
+Customer.belongsTo(Team);
+
+Team.hasMany(Property);
+Property.belongsTo(Team);
 
 User.hasMany(Task);
 Task.belongsTo(User);
@@ -79,5 +90,6 @@ module.exports = {
     Customer,
     Property,
     Task,
-    Image
+    Image,
+    Team
 };

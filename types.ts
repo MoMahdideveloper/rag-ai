@@ -97,3 +97,8 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
 }
+
+export interface Team {
+  id: number;
+  name: string;
+}
