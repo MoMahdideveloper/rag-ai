@@ -13,7 +13,7 @@ import ChatBubbleLeftEllipsisIcon from './icons/ChatBubbleLeftEllipsisIcon';
 
 interface CustomerFormProps {
     customer: Customer | null;
-    onSave: (customer: Customer) => void;
+    onSave: (customer: Omit<Customer, 'id' | 'createdAt' | 'interactions'>) => void;
     onCancel: () => void;
     onDelete: (customerId: number) => void;
     onFindMatches: (customer: Customer) => void;
@@ -37,14 +37,15 @@ const emptyRequirement: Requirement = {
     maxRent: 0
 };
 
-const getInitialFormData = (customer: Customer | null): Customer => {
-    if (customer) return JSON.parse(JSON.stringify(customer)); // Deep copy
+const getInitialFormData = (customer: Customer | null): Omit<Customer, 'id' | 'createdAt'> => {
+    if (customer) {
+        const { id, createdAt, ...rest } = customer;
+        return rest;
+    }
     return {
-        id: Date.now(),
         name: '',
         phoneNumber: '',
         status: CustomerStatus.Searching,
-        createdAt: new Date().toISOString(),
         requirements: { ...emptyRequirement },
         interactions: [],
     }
@@ -61,7 +62,7 @@ const InteractionIcon: React.FC<{type: InteractionType, className?: string}> = (
 }
 
 const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSave, onCancel, onDelete, onFindMatches, isNew, apiKeys, featureInsights }) => {
-    const [formData, setFormData] = useState<Customer>(getInitialFormData(customer));
+    const [formData, setFormData] = useState(getInitialFormData(customer));
     const [isLoading, setIsLoading] = useState({ parse: false, tag: false });
     const [newInteraction, setNewInteraction] = useState({ type: InteractionType.Note, notes: '' });
 
@@ -155,16 +156,16 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSave, onCancel,
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); onSave(formData); };
-    const handleDelete = () => { if(window.confirm(`آیا از حذف مشتری "${formData.name}" مطمئن هستید؟`)) { onDelete(formData.id); } };
-    const handleFindMatchesClick = () => { onFindMatches(formData); };
+    const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); onSave({ ...customer, ...formData }); };
+    const handleDelete = () => { if(customer && window.confirm(`آیا از حذف مشتری "${formData.name}" مطمئن هستید؟`)) { onDelete(customer.id); } };
+    const handleFindMatchesClick = () => { if (customer) onFindMatches(customer); };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
             <div className="bg-white p-8 rounded-xl shadow-sm space-y-6">
                 <div className="flex justify-between items-start">
                     <h2 className="text-2xl font-bold">{isNew ? 'افزودن مشتری جدید' : `ویرایش: ${formData.name}`}</h2>
-                    {!isNew && ( <button type="button" onClick={handleFindMatchesClick} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"><HomeModernIcon className="w-5 h-5"/><span>پیدا کردن املاک مناسب</span></button> )}
+                    {!isNew && customer && ( <button type="button" onClick={handleFindMatchesClick} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"><HomeModernIcon className="w-5 h-5"/><span>پیدا کردن املاک مناسب</span></button> )}
                 </div>
 
                 <div>
@@ -260,7 +261,7 @@ const CustomerForm: React.FC<CustomerFormProps> = ({ customer, onSave, onCancel,
                 </div>
             </div>
 
-            {!isNew && (
+            {!isNew && customer && (
                 <div className="bg-white p-8 rounded-xl shadow-sm space-y-6">
                     <h3 className="text-xl font-bold">تاریخچه فعالیت و یادداشت‌ها</h3>
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">

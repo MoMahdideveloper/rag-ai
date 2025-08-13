@@ -63,10 +63,21 @@ Property.belongsTo(User);
 User.hasMany(Task);
 Task.belongsTo(User);
 
+const Image = sequelize.define('Image', {
+    path: {
+        type: DataTypes.STRING,
+        allowNull: false
+    }
+});
+
+Property.hasMany(Image);
+Image.belongsTo(Property);
+
 module.exports = {
     sequelize,
     User,
     Customer,
     Property,
-    Task
+    Task,
+    Image
 };

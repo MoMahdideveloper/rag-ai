@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Property, TransactionType } from '../types';
+import { Property, TransactionType, Image } from '../types';
 import TrashIcon from './icons/TrashIcon';
 import SearchIcon from './icons/SearchIcon';
+import { api } from '../services/api';
 
 interface PropertyFormProps {
     property: Property | null;
-    onSave: (property: Property) => void;
+    onSave: (property: Omit<Property, 'id' | 'createdAt'>, images: FileList | null) => Promise<void>;
     onCancel: () => void;
     onDelete: (propertyId: number) => void;
     onFindMatches: (property: Property) => void;
     isNew: boolean;
+    token: string | null;
 }
 
-const emptyProperty: Omit<Property, 'id' | 'createdAt'> = {
+const emptyProperty: Omit<Property, 'id' | 'createdAt' | 'Images'> = {
     title: '',
     address: '',
     transactionType: TransactionType.Sale,
@@ -26,30 +28,26 @@ const emptyProperty: Omit<Property, 'id' | 'createdAt'> = {
     description: '',
 };
 
-const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel, onDelete, onFindMatches, isNew }) => {
-    const [formData, setFormData] = useState<Property>(
-        property || {
-            ...emptyProperty,
-            id: Date.now(),
-            createdAt: new Date().toISOString(),
-        }
+const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel, onDelete, onFindMatches, isNew, token }) => {
+    const [formData, setFormData] = useState<Omit<Property, 'id' | 'createdAt' | 'Images'>>(
+        property || emptyProperty
     );
+    const [imageFiles, setImageFiles] = useState<FileList | null>(null);
+    const [existingImages, setExistingImages] = useState<Image[]>(property?.Images || []);
 
     useEffect(() => {
         if (property) {
-            setFormData(property);
+            const { id, createdAt, Images, ...rest } = property;
+            setFormData(rest);
+            setExistingImages(Images || []);
         } else {
-             setFormData({
-                ...emptyProperty,
-                id: Date.now(),
-                createdAt: new Date().toISOString(),
-            });
+            setFormData(emptyProperty);
+            setExistingImages([]);
         }
     }, [property]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
-        const numericFields = ['price', 'rahn', 'rent', 'bedrooms', 'area'];
         const parsedValue = type === 'number' ? Number(value) || 0 : value;
         setFormData(prev => ({ ...prev, [name]: parsedValue }));
     };
@@ -59,32 +57,47 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel,
          setFormData(prev => ({ ...prev, features: values }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        await onSave(formData, imageFiles);
     };
 
     const handleDelete = () => {
-        if(window.confirm(`آیا از حذف ملک "${formData.title}" مطمئن هستید؟`)) {
-            onDelete(formData.id);
+        if(property && window.confirm(`آیا از حذف ملک "${property.title}" مطمئن هستید؟`)) {
+            onDelete(property.id);
         }
     }
 
     const handleFindMatchesClick = () => {
-        onFindMatches(formData);
+        if (property) {
+            onFindMatches(property);
+        }
+    };
+
+    const handleDeleteImage = async (imageId: number) => {
+        if (window.confirm('آیا از حذف این تصویر مطمئن هستید؟')) {
+            try {
+                await api.delete(`/api/images/${imageId}`, token);
+                setExistingImages(prev => prev.filter(img => img.id !== imageId));
+            } catch (error) {
+                console.error("Failed to delete image:", error);
+                alert("حذف تصویر با مشکل مواجه شد.");
+            }
+        }
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 bg-white p-8 rounded-xl shadow-sm">
             <div className="flex justify-between items-start">
                  <h2 className="text-2xl font-bold">{isNew ? 'افزودن ملک جدید' : 'ویرایش اطلاعات ملک'}</h2>
-                 {!isNew && (
+                 {!isNew && property && (
                      <button type="button" onClick={handleFindMatchesClick} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
                          <SearchIcon className="w-5 h-5"/><span>پیدا کردن مشتریان مناسب</span>
                      </button>
                  )}
             </div>
 
+            {/* Form fields remain the same */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                     <label htmlFor="title" className="block text-sm font-medium text-slate-700">عنوان آگهی</label>
@@ -96,7 +109,8 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel,
                 </div>
             </div>
 
-            <div>
+            {/* ... other form fields ... */}
+             <div>
                  <label htmlFor="transactionType" className="block text-sm font-medium text-slate-700">نوع معامله</label>
                  <select id="transactionType" name="transactionType" value={formData.transactionType} onChange={handleChange} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2">
                     <option value={TransactionType.Sale}>فروش</option>
@@ -146,6 +160,27 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel,
             <div>
                 <label className="block text-sm font-medium text-slate-700">ویژگی‌ها (با کاما جدا کنید)</label>
                 <input type="text" name="features" value={formData.features.join(', ')} onChange={e => handleFeaturesChange(e.target.value)} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2" placeholder="پارکینگ, آسانسور..."/>
+            </div>
+
+            {/* Image Upload Section */}
+            <div>
+                <label className="block text-sm font-medium text-slate-700">تصاویر ملک</label>
+                {existingImages.length > 0 && (
+                    <div className="mt-2 grid grid-cols-3 gap-4">
+                        {existingImages.map(image => (
+                            <div key={image.id} className="relative">
+                                <img src={`http://localhost:3001/${image.path}`} alt="Property" className="w-full h-32 object-cover rounded-md"/>
+                                <button type="button" onClick={() => handleDeleteImage(image.id)} className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1">
+                                    <TrashIcon className="w-4 h-4"/>
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="mt-4">
+                    <label htmlFor="images" className="block text-sm font-medium text-slate-700">افزودن تصاویر جدید</label>
+                    <input type="file" id="images" name="images" multiple onChange={(e) => setImageFiles(e.target.files)} className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+                </div>
             </div>
 
             <div className="flex justify-between items-center gap-4 pt-4">

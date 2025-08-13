@@ -2,7 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { sequelize, User, Customer, Property, Task } = require('./database');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { sequelize, User, Customer, Property, Task, Image } = require('./database');
 const { searchSimilarDocuments } = require('./ragService');
 
 const app = express();
@@ -11,6 +14,24 @@ const JWT_SECRET = 'your-super-secret-key-that-should-be-in-an-env-file';
 
 app.use(cors());
 app.use(express.json());
+
+app.use('/uploads', express.static('uploads'));
+
+// Multer setup for file uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const dir = 'uploads/';
+        if (!fs.existsSync(dir)){
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        cb(null, dir);
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + path.extname(file.originalname)); // Append extension
+    }
+});
+
+const upload = multer({ storage: storage });
 
 // Simple test route
 app.get('/', (req, res) => {
@@ -142,8 +163,27 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
 // Property routes
 app.get('/api/properties', authenticateToken, async (req, res) => {
     try {
-        const properties = await Property.findAll({ where: { UserId: req.user.id } });
+        const properties = await Property.findAll({
+            where: { UserId: req.user.id },
+            include: Image
+        });
         res.json(properties);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/properties/:id', authenticateToken, async (req, res) => {
+    try {
+        const property = await Property.findOne({
+            where: { id: req.params.id, UserId: req.user.id },
+            include: Image
+        });
+        if (property) {
+            res.json(property);
+        } else {
+            res.status(404).send('Property not found');
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -182,6 +222,54 @@ app.delete('/api/properties/:id', authenticateToken, async (req, res) => {
         } else {
             res.status(404).send('Property not found');
         }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/properties/:propertyId/images', authenticateToken, upload.array('images', 10), async (req, res) => {
+    try {
+        const propertyId = req.params.propertyId;
+        const property = await Property.findOne({ where: { id: propertyId, UserId: req.user.id } });
+
+        if (!property) {
+            return res.status(404).send('Property not found');
+        }
+
+        if (!req.files) {
+            return res.status(400).send('No files were uploaded.');
+        }
+
+        const images = req.files.map(file => ({
+            path: file.path,
+            PropertyId: property.id
+        }));
+
+        const createdImages = await Image.bulkCreate(images);
+        res.status(201).json(createdImages);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/images/:imageId', authenticateToken, async (req, res) => {
+    try {
+        const imageId = req.params.imageId;
+        const image = await Image.findByPk(imageId, { include: Property });
+
+        if (!image || image.Property.UserId !== req.user.id) {
+            return res.status(404).send('Image not found');
+        }
+
+        // Delete file from server
+        fs.unlink(image.path, (err) => {
+            if (err) {
+                console.error("Failed to delete image file:", err);
+            }
+        });
+
+        await image.destroy();
+        res.status(204).send();
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -148,17 +148,36 @@ const App: React.FC = () => {
     // Property Handlers
     const handleSelectProperty = (id: number) => { setSelectedPropertyId(id); setSelectedCustomerId(null); setView('property_form'); };
     const handleAddPropertyClick = () => { setSelectedPropertyId(null); setSelectedCustomerId(null); setView('property_form'); };
-    const handleSaveProperty = async (propertyData: Omit<Property, 'id' | 'createdAt'>) => {
+    const handleSaveProperty = async (propertyData: Omit<Property, 'id' | 'createdAt' | 'Images'>, images: FileList | null) => {
         try {
             const savedProperty = propertyData.id
                 ? await api.put(`/api/properties/${propertyData.id}`, propertyData, token)
                 : await api.post('/api/properties', propertyData, token);
 
-            setProperties(prev =>
-                propertyData.id ? prev.map(p => p.id === savedProperty.id ? savedProperty : p) : [...prev, savedProperty]
-            );
+            if (images && images.length > 0) {
+                const formData = new FormData();
+                for (let i = 0; i < images.length; i++) {
+                    formData.append('images', images[i]);
+                }
+                await fetch(`http://localhost:3001/api/properties/${savedProperty.id}/images`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'Authorization': `Bearer ${token}` },
+                });
+            }
+
+            const updatedProperty = await api.get(`/api/properties/${savedProperty.id}`, token);
+
+            setProperties(prev => {
+                const existing = prev.find(p => p.id === updatedProperty.id);
+                if (existing) {
+                    return prev.map(p => p.id === updatedProperty.id ? updatedProperty : p);
+                }
+                return [...prev, updatedProperty];
+            });
+
             setView('property_form');
-            setSelectedPropertyId(savedProperty.id);
+            setSelectedPropertyId(updatedProperty.id);
         } catch (error) {
             console.error("Failed to save property:", error);
         }
@@ -236,7 +255,7 @@ const App: React.FC = () => {
     const renderMainContent = () => {
         switch (view) {
             case 'customer_form': return <CustomerForm customer={selectedCustomer} onSave={handleSaveCustomer} onCancel={handleBackToDashboard} onDelete={handleDeleteCustomer} onFindMatches={() => {}} isNew={!selectedCustomer} apiKeys={apiKeys} featureInsights={featureInsights} />;
-            case 'property_form': return <PropertyForm property={selectedProperty} onSave={handleSaveProperty} onCancel={handleBackToDashboard} onDelete={handleDeleteProperty} onFindMatches={() => {}} isNew={!selectedProperty} />;
+            case 'property_form': return <PropertyForm property={selectedProperty} onSave={handleSaveProperty} onCancel={handleBackToDashboard} onDelete={handleDeleteProperty} onFindMatches={() => {}} isNew={!selectedProperty} token={token} />;
             case 'search_results': return <SearchResults results={searchResults} customers={customers} isLoading={isSearching} onBack={handleBackToDashboard} onSelectCustomer={handleSelectCustomer} isFallback={searchFallbackUsed} />;
             case 'property_match_results': return <PropertyMatchResults results={propertyMatchResults} properties={properties} isLoading={isSearching} onBack={handleBackToDashboard} onSelectProperty={handleSelectProperty} isFallback={searchFallbackUsed} />;
             case 'task_manager': return <TaskManager tasks={tasks} customers={customers} onSaveTask={handleSaveTask} onDeleteTask={handleDeleteTask} onToggleTask={handleToggleTask} onSelectCustomer={handleSelectCustomer} />;
