@@ -3,6 +3,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { sequelize, User, Customer, Property, Task } = require('./database');
+const { searchSimilarDocuments } = require('./ragService');
 
 const app = express();
 const PORT = 3001;
@@ -67,6 +68,28 @@ const authenticateToken = (req, res, next) => {
         next();
     });
 };
+
+// RAG Search Route
+app.post('/api/rag-search', authenticateToken, async (req, res) => {
+    try {
+        const { query } = req.body;
+        if (!query) {
+            return res.status(400).json({ error: 'Query is required' });
+        }
+
+        // Fetch the user's data
+        const customers = await Customer.findAll({ where: { UserId: req.user.id } });
+        const properties = await Property.findAll({ where: { UserId: req.user.id } });
+
+        // Perform the RAG search
+        const context = await searchSimilarDocuments(query, customers, properties);
+
+        res.json({ context });
+    } catch (error) {
+        console.error('RAG search error:', error);
+        res.status(500).json({ error: 'Failed to perform RAG search' });
+    }
+});
 
 // Customer routes
 app.get('/api/customers', authenticateToken, async (req, res) => {

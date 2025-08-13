@@ -1,6 +1,6 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { Customer, Requirement, MatchResult, Property, PropertyMatchResult, ChatMessage, Task, TransactionType } from '../types';
-import { searchSimilarDocuments } from './ragService';
+import { api } from './api';
 
 let currentApiKeyIndex = 0;
 
@@ -232,39 +232,37 @@ export const findMatchingProperties = async (apiKeys: string[], customer: Custom
 export const getAiCopilotResponse = async (
     apiKeys: string[],
     history: ChatMessage[],
-    customers: Customer[],
-    properties: Property[],
-    tasks: Task[],
-    query: string
+    query: string,
+    token: string | null
 ): Promise<string> => {
     const conversationHistoryForApi = history.map(msg => ({
         role: msg.role,
         parts: [{ text: msg.content }]
     }));
 
-    // 1. Search for relevant documents
-    const relevantDocIds = await searchSimilarDocuments(query, 5);
-    const relevantCustomers = customers.filter(c => relevantDocIds.includes(`customer-${c.id}`));
-    const relevantProperties = properties.filter(p => relevantDocIds.includes(`property-${p.id}`));
-
-    // 2. Construct context from retrieved documents
-    const context = `
-        Potentially relevant customers: ${JSON.stringify(relevantCustomers, null, 2)}
-        Potentially relevant properties: ${JSON.stringify(relevantProperties, null, 2)}
-        All tasks (for context): ${JSON.stringify(tasks, null, 2)}
-    `;
+    // 1. Get context from backend RAG service
+    let context = "No context was retrieved from the CRM.";
+    try {
+        const ragResponse = await api.post('/api/rag-search', { query }, token);
+        if (ragResponse.context && ragResponse.context.length > 0) {
+            context = ragResponse.context.join('\n\n');
+        }
+    } catch (error) {
+        console.error("Failed to get RAG context:", error);
+        context = "There was an error retrieving context from the CRM.";
+    }
 
     const systemInstruction = `
         You are "هوشمند", an expert AI assistant for a real estate CRM. You are interacting with a real estate agent.
         Your goal is to be helpful, concise, and professional. All your responses must be in Persian.
-        You have access to some context from the CRM's dataset in JSON format below. Use this data to answer the user's question.
+        You have access to some potentially relevant context from the CRM's dataset below. Use this data to answer the user's question.
         The user's latest question is: "${query}".
         Base your answer on the provided context. If the context is not sufficient, you can use your general knowledge but state that the information is not from the CRM.
-        If you are asked to generate a list or table, use markdown for formatting.
-        Do not mention that you are an AI or working with JSON. Just provide the answer directly.
 
         Context from CRM:
+        ---
         ${context}
+        ---
     `;
 
     try {

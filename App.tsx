@@ -20,7 +20,6 @@ import LogoutIcon from './components/icons/LogoutIcon';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Register from './components/Register';
-import { initDB, addDocument, customerToDocument, propertyToDocument, deleteDocument } from './services/ragService';
 import { api } from './services/api';
 
 const API_KEYS_STORAGE_KEY = 'smart-crm-api-keys-v1';
@@ -51,7 +50,6 @@ const App: React.FC = () => {
         learnedKeywords: ["پارکینگ", "آسانسور", "بالکن", "انباری", "نوساز", "دسترسی به مترو", "ویو خوب", "استخر"]
     });
     const [featureInsights, setFeatureInsights] = useState<string[]>([]);
-    const [isRagInitialized, setIsRagInitialized] = useState(false);
 
     useEffect(() => {
         const initializeApp = async () => {
@@ -67,22 +65,9 @@ const App: React.FC = () => {
                 setProperties(propertiesData);
                 setTasks(tasksData);
 
-                await initDB();
-
-                console.log('Indexing existing data for user...');
-                for (const customer of customersData) {
-                    await addDocument(customerToDocument(customer));
-                }
-                for (const property of propertiesData) {
-                    await addDocument(propertyToDocument(property));
-                }
-                console.log('Finished indexing existing data.');
-
-                setIsRagInitialized(true);
-
             } catch (error) {
                 console.error("Failed to initialize the application:", error);
-                logout(); // Log out if token is invalid or fetching fails
+                logout();
             }
         };
 
@@ -141,11 +126,9 @@ const App: React.FC = () => {
                 ? await api.put(`/api/customers/${customerData.id}`, customerData, token)
                 : await api.post('/api/customers', customerData, token);
 
-            setCustomers(prev => {
-                const newCustomers = customerData.id ? prev.map(c => c.id === savedCustomer.id ? savedCustomer : c) : [...prev, savedCustomer];
-                if (isRagInitialized) addDocument(customerToDocument(savedCustomer));
-                return newCustomers;
-            });
+            setCustomers(prev =>
+                customerData.id ? prev.map(c => c.id === savedCustomer.id ? savedCustomer : c) : [...prev, savedCustomer]
+            );
             setView('customer_form');
             setSelectedCustomerId(savedCustomer.id);
         } catch (error) {
@@ -156,7 +139,6 @@ const App: React.FC = () => {
         try {
             await api.delete(`/api/customers/${customerId}`, token);
             setCustomers(prev => prev.filter(c => c.id !== customerId));
-            if (isRagInitialized) deleteDocument(`customer-${customerId}`);
             handleBackToDashboard();
         } catch (error) {
             console.error("Failed to delete customer:", error);
@@ -172,11 +154,9 @@ const App: React.FC = () => {
                 ? await api.put(`/api/properties/${propertyData.id}`, propertyData, token)
                 : await api.post('/api/properties', propertyData, token);
 
-            setProperties(prev => {
-                const newProperties = propertyData.id ? prev.map(p => p.id === savedProperty.id ? savedProperty : p) : [...prev, savedProperty];
-                if (isRagInitialized) addDocument(propertyToDocument(savedProperty));
-                return newProperties;
-            });
+            setProperties(prev =>
+                propertyData.id ? prev.map(p => p.id === savedProperty.id ? savedProperty : p) : [...prev, savedProperty]
+            );
             setView('property_form');
             setSelectedPropertyId(savedProperty.id);
         } catch (error) {
@@ -187,7 +167,6 @@ const App: React.FC = () => {
         try {
             await api.delete(`/api/properties/${propertyId}`, token);
             setProperties(prev => prev.filter(p => p.id !== propertyId));
-            if (isRagInitialized) deleteDocument(`property-${propertyId}`);
             handleBackToDashboard();
         } catch (error) {
             console.error("Failed to delete property:", error);
@@ -203,9 +182,9 @@ const App: React.FC = () => {
                 ? await api.put(`/api/tasks/${taskData.id}`, taskData, token)
                 : await api.post('/api/tasks', taskData, token);
 
-            setTasks(prev => {
-                return taskData.id ? prev.map(t => t.id === savedTask.id ? savedTask : t) : [...prev, savedTask];
-            });
+            setTasks(prev =>
+                taskData.id ? prev.map(t => t.id === savedTask.id ? savedTask : t) : [...prev, savedTask]
+            );
         } catch (error) {
             console.error("Failed to save task:", error);
         }
@@ -242,14 +221,14 @@ const App: React.FC = () => {
         setChatMessages(prev => [...prev, newUserMessage]);
         setIsCopilotLoading(true);
         try {
-            const responseText = await getAiCopilotResponse(apiKeys, [...chatMessages, newUserMessage], customers, properties, tasks, message);
+            const responseText = await getAiCopilotResponse(apiKeys, [...chatMessages, newUserMessage], message, token);
             setChatMessages(prev => [...prev, { role: 'model', content: responseText }]);
         } catch (error) {
             setChatMessages(prev => [...prev, { role: 'model', content: `متاسفانه خطایی رخ داد: ${error}` }]);
         } finally {
             setIsCopilotLoading(false);
         }
-    }, [chatMessages, customers, properties, tasks, apiKeys, isRagInitialized]);
+    }, [chatMessages, apiKeys, token]);
 
     const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || null;
     const selectedProperty = properties.find(p => p.id === selectedPropertyId) || null;
