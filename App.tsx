@@ -19,6 +19,8 @@ import Settings from './components/Settings';
 import LogoutIcon from './components/icons/LogoutIcon';
 import UsersIcon from './components/icons/UsersIcon';
 import TeamSettings from './components/TeamSettings';
+import ChartBarIcon from './components/icons/ChartBarIcon';
+import AnalyticsDashboard from './components/AnalyticsDashboard';
 import { useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -42,7 +44,7 @@ const App: React.FC = () => {
 
     const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
     const [selectedPropertyId, setSelectedPropertyId] = useState<number | null>(null);
-    const [view, setView] = useState<'dashboard' | 'customer_form' | 'property_form' | 'search_results' | 'property_match_results' | 'task_manager' | 'calendar' | 'ai_copilot' | 'settings' | 'team_settings'>('dashboard');
+    const [view, setView] = useState<'dashboard' | 'customer_form' | 'property_form' | 'search_results' | 'property_match_results' | 'task_manager' | 'calendar' | 'ai_copilot' | 'settings' | 'team_settings' | 'analytics_dashboard'>('dashboard');
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<MatchResult[]>([]);
     const [propertyMatchResults, setPropertyMatchResults] = useState<PropertyMatchResult[]>([]);
@@ -81,7 +83,7 @@ const App: React.FC = () => {
                     const [customersData, propertiesData, tasksData] = await Promise.all([
                         api.get(`/api/customers?teamId=${activeTeam.id}`, token),
                         api.get(`/api/properties?teamId=${activeTeam.id}`, token),
-                        api.get('/api/tasks', token), // Tasks are user-specific
+                        api.get('/api/tasks', token),
                     ]);
                     setCustomers(customersData);
                     setProperties(propertiesData);
@@ -117,14 +119,13 @@ const App: React.FC = () => {
     }
 
     // ... other useEffects and handlers ...
-
     const handleSaveCustomer = async (customerData: Omit<Customer, 'id' | 'createdAt' | 'interactions'>) => {
         if (!activeTeam) {
             alert("Please select or create a team first.");
             return;
         }
         try {
-            const payload = { ...customerData, teamId: activeTeam.id };
+            const payload = { ...customerData, TeamId: activeTeam.id };
             const savedCustomer = customerData.id
                 ? await api.put(`/api/customers/${customerData.id}`, payload, token)
                 : await api.post('/api/customers', payload, token);
@@ -145,7 +146,7 @@ const App: React.FC = () => {
             return;
         }
         try {
-            const payload = { ...propertyData, teamId: activeTeam.id };
+            const payload = { ...propertyData, TeamId: activeTeam.id };
             const savedProperty = propertyData.id
                 ? await api.put(`/api/properties/${propertyData.id}`, payload, token)
                 : await api.post('/api/properties', payload, token);
@@ -204,8 +205,9 @@ const App: React.FC = () => {
 
     const renderMainContent = () => {
         switch (view) {
-            // ... other cases
+            case 'analytics_dashboard': return <AnalyticsDashboard activeTeamId={activeTeam?.id || null} />;
             case 'team_settings': return <TeamSettings />;
+            // ... other cases
         }
     };
 
@@ -228,6 +230,7 @@ const App: React.FC = () => {
                  </div>
                 <nav className="mt-6 flex flex-col gap-2">
                     {/* ... other buttons ... */}
+                    <button onClick={() => setView('analytics_dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-colors ${view === 'analytics_dashboard' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`}><ChartBarIcon className="w-6 h-6" /><span>Analytics</span></button>
                     <button onClick={() => setView('team_settings')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-colors ${view === 'team_settings' ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'}`}><UsersIcon className="w-6 h-6" /><span>Team Settings</span></button>
                     <button onClick={handleLogout} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-semibold transition-colors text-slate-600 hover:bg-slate-100`}><LogoutIcon className="w-6 h-6" /><span>خروج</span></button>
                 </nav>

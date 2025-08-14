@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { sequelize, User, Customer, Property, Task, Image, Team } = require('./database');
+const { fn, col } = require('sequelize');
 const { searchSimilarDocuments } = require('./ragService');
 
 const app = express();
@@ -149,6 +150,53 @@ app.post('/api/teams/:teamId/invite', authenticateToken, async (req, res) => {
 
         await team.addUser(userToInvite.id, { through: { role: 'member' } });
         res.status(200).json({ message: 'User invited successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Analytics Routes
+app.get('/api/analytics/summary', authenticateToken, isTeamMember, async (req, res) => {
+    try {
+        const { teamId } = req.query;
+
+        const totalCustomers = await Customer.count({ where: { TeamId: teamId } });
+        const totalProperties = await Property.count({ where: { TeamId: teamId } });
+
+        const propertiesForSale = await Property.count({ where: { TeamId: teamId, transactionType: 'Sale' } });
+        const propertiesForRent = await Property.count({ where: { TeamId: teamId, transactionType: 'Rent' } });
+
+        const tasksCompleted = await Task.count({ where: { UserId: req.user.id, isCompleted: true } });
+        const tasksPending = await Task.count({ where: { UserId: req.user.id, isCompleted: false } });
+
+        res.json({
+            totalCustomers,
+            totalProperties,
+            propertiesForSale,
+            propertiesForRent,
+            tasksCompleted,
+            tasksPending
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/analytics/timeseries', authenticateToken, isTeamMember, async (req, res) => {
+    try {
+        const { teamId } = req.query;
+
+        const customerSeries = await Customer.findAll({
+            where: { TeamId: teamId },
+            attributes: [
+                [fn('strftime', '%Y-%m', col('createdAt')), 'month'],
+                [fn('count', col('id')), 'count']
+            ],
+            group: ['month'],
+            order: [['month', 'ASC']]
+        });
+
+        res.json({ customerSeries });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
