@@ -45,6 +45,23 @@
 اکنون تمام قابلیت‌های هوش مصنوعی فعال شده و آماده استفاده است!
 
 ---
+## ⚙️ Environment Variables
+
+For the backend server to run correctly, you need to create a `.env` file in the `backend` directory.
+
+```
+# backend/.env
+
+# A strong, secret key for signing authentication tokens
+JWT_SECRET=your-super-secret-key-goes-here
+
+# Your API key from SendGrid for the email feature
+SENDGRID_API_KEY=SG.xxxxxxxxxxxxxxxxxxxxxx
+
+# An email address you have verified with SendGrid
+FROM_EMAIL=your-email@example.com
+```
+---
 
 ## 🛠️ تکنولوژی‌های استفاده شده
 
@@ -52,4 +69,4 @@
 - **Styling:** Tailwind CSS
 - **AI:** Google Gemini API (`@google/genai`)
 - **State Management:** React Hooks (`useState`, `useEffect`, etc.)
-- **Persistence:** Browser `localStorage`
+- **Persistence:** SQLite Database via Node.js/Express Backend

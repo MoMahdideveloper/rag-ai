@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
@@ -5,13 +6,14 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, User, Customer, Property, Task, Image, Team } = require('./database');
+const { sequelize, User, Customer, Property, Task, Image, Team, Interaction } = require('./database');
 const { fn, col } = require('sequelize');
 const { searchSimilarDocuments } = require('./ragService');
+const { sendEmail } = require('./emailService');
 
 const app = express();
 const PORT = 3001;
-const JWT_SECRET = 'your-super-secret-key-that-should-be-in-an-env-file';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-that-should-be-in-an-env-file';
 
 app.use(cors());
 app.use(express.json());
@@ -225,8 +227,25 @@ app.post('/api/rag-search', authenticateToken, isTeamMember, async (req, res) =>
 // Customer routes
 app.get('/api/customers', authenticateToken, isTeamMember, async (req, res) => {
     try {
-        const customers = await Customer.findAll({ where: { TeamId: req.query.teamId } });
+        const customers = await Customer.findAll({
+            where: { TeamId: req.query.teamId },
+            include: [Interaction]
+        });
         res.json(customers);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/customers/:id', authenticateToken, async (req, res) => {
+    try {
+        const customer = await Customer.findByPk(req.params.id, { include: [Interaction, Team] });
+        const isMember = await customer.Team.hasUser(req.user.id);
+        if (customer && isMember) {
+            res.json(customer);
+        } else {
+            res.status(404).send('Customer not found or user not a member of the team');
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -269,6 +288,50 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/customers/:customerId/send-email', authenticateToken, async (req, res) => {
+    try {
+        const { subject, body } = req.body;
+        const { customerId } = req.params;
+
+        if (!subject || !body) {
+            return res.status(400).json({ error: 'Subject and body are required' });
+        }
+
+        const customer = await Customer.findByPk(customerId, { include: Team });
+        if (!customer) {
+            return res.status(404).send('Customer not found');
+        }
+
+        const isMember = await customer.Team.hasUser(req.user.id);
+        if (!isMember) {
+            return res.status(403).send('User is not a member of the team this customer belongs to');
+        }
+
+        const fromAddress = process.env.FROM_EMAIL || 'your-verified-sender@example.com';
+
+        await sendEmail({
+            to: customer.email,
+            from: fromAddress,
+            subject: subject,
+            text: body,
+            html: `<p>${body}</p>`,
+        });
+
+        const interaction = await Interaction.create({
+            type: 'Email',
+            notes: `Subject: ${subject}\n\n${body}`,
+            date: new Date(),
+            CustomerId: customer.id,
+            UserId: req.user.id
+        });
+
+        res.status(200).json(interaction);
+    } catch (error) {
+        console.error('Failed to send email or log interaction:', error);
+        res.status(500).json({ error: 'Failed to send email' });
     }
 });
 

@@ -7,12 +7,11 @@ const sequelize = new Sequelize({
 
 const Customer = sequelize.define('Customer', {
     name: { type: DataTypes.STRING, allowNull: false },
+    email: { type: DataTypes.STRING, validate: { isEmail: true } },
     phoneNumber: { type: DataTypes.STRING },
     status: { type: DataTypes.STRING },
     createdAt: { type: DataTypes.DATE },
-    // For requirements and interactions, we'll use JSONB/TEXT since they are complex objects
-    requirements: { type: DataTypes.JSON },
-    interactions: { type: DataTypes.JSON }
+    requirements: { type: DataTypes.JSON }
 }, { timestamps: false });
 
 const Property = sequelize.define('Property', {
@@ -84,6 +83,18 @@ const Image = sequelize.define('Image', {
 Property.hasMany(Image);
 Image.belongsTo(Property);
 
+const Interaction = sequelize.define('Interaction', {
+    type: { type: DataTypes.STRING, allowNull: false },
+    date: { type: DataTypes.DATE, allowNull: false },
+    notes: { type: DataTypes.TEXT }
+});
+
+Customer.hasMany(Interaction);
+Interaction.belongsTo(Customer);
+
+User.hasMany(Interaction);
+Interaction.belongsTo(User);
+
 module.exports = {
     sequelize,
     User,
@@ -91,5 +102,6 @@ module.exports = {
     Property,
     Task,
     Image,
-    Team
+    Team,
+    Interaction
 };
