@@ -107,6 +107,39 @@ export const parseCustomerNotes = async (
     }
 };
 
+export const generatePropertyDescription = async (
+    apiKeys: string[],
+    property: Partial<Property>
+): Promise<string> => {
+    const prompt = `
+        You are an expert real estate copywriter. Your task is to write a compelling, professional, and appealing property description in Persian.
+        Based on the structured data provided below, generate a 2-3 paragraph description for a property listing.
+        Highlight the key features and create a narrative that would attract potential buyers or renters.
+        Do not just list the features; weave them into a descriptive text.
+
+        Property Data:
+        - Title: ${property.title}
+        - Type: ${property.propertyType}
+        - Location: ${property.address}
+        - Area: ${property.area} square meters
+        - Bedrooms: ${property.bedrooms}
+        - Transaction Type: ${property.transactionType}
+        - Price/Rent details: ${property.transactionType === 'Sale' ? `Price: ${property.price}` : `Rahn: ${property.rahn}, Rent: ${property.rent}`}
+        - Key Features: ${property.features?.join(', ')}
+
+        ---
+        Generated Description (in Persian):
+    `;
+
+    try {
+        const response = await makeGeminiRequest(apiKeys, "gemini-2.5-flash-preview-04-17", prompt);
+        return response.text.trim();
+    } catch (error) {
+        console.error("Error generating property description:", error);
+        throw error;
+    }
+};
+
 export const generateTagsForNotes = async (
     apiKeys: string[],
     notes: string

@@ -1,17 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Property, TransactionType, Image } from '../types';
 import TrashIcon from './icons/TrashIcon';
 import SearchIcon from './icons/SearchIcon';
+import SparklesIcon from './icons/SparklesIcon';
+import Spinner from './common/Spinner';
 import { api } from '../services/api';
+import { generatePropertyDescription } from '../services/geminiService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PropertyFormProps {
     property: Property | null;
-    onSave: (property: Omit<Property, 'id' | 'createdAt'>, images: FileList | null) => Promise<void>;
+    onSave: (property: Omit<Property, 'id' | 'createdAt' | 'Images'>, images: FileList | null) => Promise<void>;
     onCancel: () => void;
     onDelete: (propertyId: number) => void;
     onFindMatches: (property: Property) => void;
     isNew: boolean;
     token: string | null;
+    apiKeys: string[];
 }
 
 const emptyProperty: Omit<Property, 'id' | 'createdAt' | 'Images'> = {
@@ -28,12 +33,13 @@ const emptyProperty: Omit<Property, 'id' | 'createdAt' | 'Images'> = {
     description: '',
 };
 
-const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel, onDelete, onFindMatches, isNew, token }) => {
+const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel, onDelete, onFindMatches, isNew, token, apiKeys }) => {
     const [formData, setFormData] = useState<Omit<Property, 'id' | 'createdAt' | 'Images'>>(
         property || emptyProperty
     );
     const [imageFiles, setImageFiles] = useState<FileList | null>(null);
     const [existingImages, setExistingImages] = useState<Image[]>(property?.Images || []);
+    const [isGeneratingDesc, setIsGeneratingDesc] = useState(false);
 
     useEffect(() => {
         if (property) {
@@ -85,6 +91,22 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel,
             }
         }
     };
+
+    const handleGenerateDescription = useCallback(async () => {
+        if (apiKeys.length === 0) {
+            alert("لطفا ابتدا یک کلید API در بخش تنظیمات اضافه کنید.");
+            return;
+        }
+        setIsGeneratingDesc(true);
+        try {
+            const description = await generatePropertyDescription(apiKeys, formData);
+            setFormData(prev => ({ ...prev, description }));
+        } catch (e) {
+            alert(`خطا در تولید توضیحات: ${e instanceof Error ? e.message : String(e)}`);
+        } finally {
+            setIsGeneratingDesc(false);
+        }
+    }, [apiKeys, formData]);
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 bg-white p-8 rounded-xl shadow-sm">
@@ -153,8 +175,14 @@ const PropertyForm: React.FC<PropertyFormProps> = ({ property, onSave, onCancel,
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-slate-700">توضیحات ملک</label>
-                <textarea name="description" value={formData.description} onChange={handleChange} rows={4} className="mt-1 block w-full rounded-md border-slate-300 shadow-sm p-2" placeholder="جزئیات بیشتر در مورد ملک..."></textarea>
+                <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-slate-700">توضیحات ملک</label>
+                    <button type="button" onClick={handleGenerateDescription} disabled={isGeneratingDesc} className="flex items-center gap-2 text-sm bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-md hover:bg-indigo-200 disabled:opacity-50">
+                        {isGeneratingDesc ? <Spinner /> : <SparklesIcon className="w-4 h-4" />}
+                        تولید با هوش مصنوعی
+                    </button>
+                </div>
+                <textarea name="description" value={formData.description} onChange={handleChange} rows={4} className="block w-full rounded-md border-slate-300 shadow-sm p-2" placeholder="جزئیات بیشتر در مورد ملک..."></textarea>
             </div>
 
             <div>

@@ -205,9 +205,17 @@ const App: React.FC = () => {
 
     const renderMainContent = () => {
         switch (view) {
+            case 'customer_form': return <CustomerForm customer={selectedCustomer} onSave={handleSaveCustomer} onCancel={handleBackToDashboard} onDelete={handleDeleteCustomer} onFindMatches={() => {}} isNew={!selectedCustomer} apiKeys={apiKeys} featureInsights={featureInsights} />;
+            case 'property_form': return <PropertyForm property={selectedProperty} onSave={handleSaveProperty} onCancel={handleBackToDashboard} onDelete={handleDeleteProperty} onFindMatches={() => {}} isNew={!selectedProperty} token={token} apiKeys={apiKeys} />;
+            case 'search_results': return <SearchResults results={searchResults} customers={customers} isLoading={isSearching} onBack={handleBackToDashboard} onSelectCustomer={handleSelectCustomer} isFallback={searchFallbackUsed} />;
+            case 'property_match_results': return <PropertyMatchResults results={propertyMatchResults} properties={properties} isLoading={isSearching} onBack={handleBackToDashboard} onSelectProperty={handleSelectProperty} isFallback={searchFallbackUsed} />;
+            case 'task_manager': return <TaskManager tasks={tasks} customers={customers} onSaveTask={handleSaveTask} onDeleteTask={handleDeleteTask} onToggleTask={handleToggleTask} onSelectCustomer={handleSelectCustomer} />;
+            case 'calendar': return <CalendarView tasks={tasks} customers={customers} onSaveTask={handleSaveTask} onSelectCustomer={handleSelectCustomer} />;
+            case 'ai_copilot': return <AiCopilot messages={chatMessages} isLoading={isCopilotLoading} onSendMessage={handleSendMessageToCopilot} />;
+            case 'settings': return <Settings apiKeys={apiKeys} onSave={setApiKeys} onExport={() => {}} />;
             case 'analytics_dashboard': return <AnalyticsDashboard activeTeamId={activeTeam?.id || null} />;
             case 'team_settings': return <TeamSettings />;
-            // ... other cases
+            case 'dashboard': default: return <Dashboard customers={customers} properties={properties} tasks={tasks} onAddCustomer={handleAddCustomerClick} onAddProperty={handleAddPropertyClick} onViewTasks={handleViewTasks} onViewCalendar={handleViewCalendar} onSelectCustomer={handleSelectCustomer} onToggleTask={handleToggleTask} />;
         }
     };
 
