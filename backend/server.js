@@ -10,6 +10,7 @@ const { sequelize, User, Customer, Property, Task, Image, Team, Interaction } = 
 const { fn, col } = require('sequelize');
 const { searchSimilarDocuments } = require('./ragService');
 const { sendEmail } = require('./emailService');
+const { getLeadScoreFromAI } = require('./aiService');
 
 const app = express();
 const PORT = 3001;
@@ -255,6 +256,14 @@ app.post('/api/customers', authenticateToken, isTeamMember, async (req, res) => 
     try {
         const { teamId, ...customerData } = req.body;
         const newCustomer = await Customer.create({ ...customerData, TeamId: teamId });
+
+        // Fire-and-forget AI scoring
+        getLeadScoreFromAI(newCustomer).then(({ score, reasoning }) => {
+            if (score !== null) {
+                newCustomer.update({ leadScore: score, leadScoreReasoning: reasoning });
+            }
+        }).catch(err => console.error("AI Scoring failed:", err));
+
         res.status(201).json(newCustomer);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -267,6 +276,14 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
         const isMember = await customer.Team.hasUser(req.user.id);
         if (customer && isMember) {
             await customer.update(req.body);
+
+            // Fire-and-forget AI scoring
+            getLeadScoreFromAI(customer).then(({ score, reasoning }) => {
+                if (score !== null) {
+                    customer.update({ leadScore: score, leadScoreReasoning: reasoning });
+                }
+            }).catch(err => console.error("AI Scoring failed:", err));
+
             res.json(customer);
         } else {
             res.status(404).send('Customer not found or user not a member of the team');

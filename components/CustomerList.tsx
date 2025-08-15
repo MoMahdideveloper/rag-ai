@@ -23,6 +23,13 @@ const transactionColorMap: { [key in TransactionType]: string } = {
     [TransactionType.Rent]: 'text-green-700 bg-green-100',
 };
 
+const getScoreColor = (score: number | undefined | null) => {
+    if (score === undefined || score === null) return 'bg-slate-200 text-slate-600';
+    if (score >= 8) return 'bg-green-200 text-green-800';
+    if (score >= 5) return 'bg-yellow-200 text-yellow-800';
+    return 'bg-red-200 text-red-800';
+};
+
 const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCustomer, onSelectCustomer, selectedCustomerId, onGeminiImport, onRawImport }) => {
     return (
         <div className="flex flex-col">
@@ -59,9 +66,23 @@ const CustomerList: React.FC<CustomerListProps> = ({ customers, onAddCustomer, o
                                         <p className="font-medium">{customer.name}</p>
                                         <p className={`text-sm ${selectedCustomerId === customer.id ? 'text-indigo-700' : 'text-slate-600'}`}>{customer.phoneNumber}</p>
                                     </div>
-                                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${transactionColorMap[customer.requirements.transactionType]}`}>
-                                        {customer.requirements.transactionType === TransactionType.Sale ? 'فروشی' : 'اجاره'}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        {customer.leadScore && (
+                                            <div className="relative group">
+                                                <span className={`text-xs font-bold px-2 py-1 rounded-full ${getScoreColor(customer.leadScore)}`}>
+                                                    {customer.leadScore}
+                                                </span>
+                                                {customer.leadScoreReasoning && (
+                                                    <div className="absolute bottom-full mb-2 w-48 bg-slate-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+                                                        {customer.leadScoreReasoning}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${transactionColorMap[customer.requirements.transactionType]}`}>
+                                            {customer.requirements.transactionType === TransactionType.Sale ? 'فروشی' : 'اجاره'}
+                                        </span>
+                                    </div>
                                 </button>
                             </li>
                         ))}

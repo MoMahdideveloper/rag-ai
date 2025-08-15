@@ -48,11 +48,14 @@ export interface Requirement {
 export interface Customer {
   id: number;
   name: string;
+  email: string;
   phoneNumber: string;
   status: CustomerStatus;
   createdAt: string;
   requirements: Requirement;
-  interactions: Interaction[];
+  Interactions?: Interaction[];
+  leadScore?: number;
+  leadScoreReasoning?: string;
 }
 
 export interface Property {

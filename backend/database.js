@@ -11,7 +11,9 @@ const Customer = sequelize.define('Customer', {
     phoneNumber: { type: DataTypes.STRING },
     status: { type: DataTypes.STRING },
     createdAt: { type: DataTypes.DATE },
-    requirements: { type: DataTypes.JSON }
+    requirements: { type: DataTypes.JSON },
+    leadScore: { type: DataTypes.INTEGER },
+    leadScoreReasoning: { type: DataTypes.TEXT }
 }, { timestamps: false });
 
 const Property = sequelize.define('Property', {
