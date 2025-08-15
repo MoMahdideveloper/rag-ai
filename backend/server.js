@@ -533,8 +533,8 @@ app.delete('/api/tasks/:id', authenticateToken, async (req, res) => {
 
 const startServer = async () => {
     try {
-        await sequelize.sync();
-        console.log('Database synchronized');
+        await sequelize.authenticate();
+        console.log('Database connection has been established successfully.');
 
         // اجرای تابع برای فعال‌سازی افزونه
         await setupVectorExtension();

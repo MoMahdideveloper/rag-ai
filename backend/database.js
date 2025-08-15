@@ -1,134 +1,17 @@
-const { Sequelize, DataTypes } = require('sequelize');
+'use strict';
+
 const { registerTypes } = require('pgvector/sequelize');
+const db = require('./models');
 
-const sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASS, {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    dialect: 'postgres',
-    logging: false
-});
+// Function to set up the vector extension in the database
+const setupVectorExtension = async () => {
+    await db.sequelize.query('CREATE EXTENSION IF NOT EXISTS vector;');
+    registerTypes(db.sequelize);
+};
 
-async function setupVectorExtension() {
-    await sequelize.query('CREATE EXTENSION IF NOT EXISTS vector;');
-    registerTypes(sequelize);
-}
-
-const Customer = sequelize.define('Customer', {
-    name: { type: DataTypes.STRING, allowNull: false },
-    email: { type: DataTypes.STRING, validate: { isEmail: true } },
-    phoneNumber: { type: DataTypes.STRING },
-    status: { type: DataTypes.STRING },
-    createdAt: { type: DataTypes.DATE },
-    requirements: { type: DataTypes.JSON },
-    leadScore: { type: DataTypes.INTEGER },
-    leadScoreReasoning: { type: DataTypes.TEXT },
-    embedding: { type: DataTypes.VECTOR(384) }
-}, {
-    timestamps: false,
-    indexes: [{
-        fields: ['embedding'],
-        using: 'hnsw',
-        operator: 'vector_cosine_ops'
-    }]
-});
-
-const Property = sequelize.define('Property', {
-    title: { type: DataTypes.STRING, allowNull: false },
-    address: { type: DataTypes.STRING },
-    transactionType: { type: DataTypes.STRING },
-    propertyType: { type: DataTypes.STRING },
-    area: { type: DataTypes.INTEGER },
-    bedrooms: { type: DataTypes.INTEGER },
-    price: { type: DataTypes.BIGINT },
-    rahn: { type: DataTypes.BIGINT },
-    rent: { type: DataTypes.BIGINT },
-    features: { type: DataTypes.JSON },
-    description: { type: DataTypes.TEXT },
-    createdAt: { type: DataTypes.DATE },
-    embedding: { type: DataTypes.VECTOR(384) }
-}, {
-    timestamps: false,
-    indexes: [{
-        fields: ['embedding'],
-        using: 'hnsw',
-        operator: 'vector_cosine_ops'
-    }]
-});
-
-const Task = sequelize.define('Task', {
-    title: { type: DataTypes.STRING, allowNull: false },
-    dueDate: { type: DataTypes.DATEONLY },
-    priority: { type: DataTypes.STRING },
-    isCompleted: { type: DataTypes.BOOLEAN, defaultValue: false },
-    customerId: { type: DataTypes.INTEGER },
-    createdAt: { type: DataTypes.DATE }
-}, { timestamps: false });
-
-const User = sequelize.define('User', {
-    email: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
-        validate: {
-            isEmail: true
-        }
-    },
-    password: {
-        type: DataTypes.STRING,
-        allowNull: false
-    }
-});
-
-const Team = sequelize.define('Team', {
-    name: {
-        type: DataTypes.STRING,
-        allowNull: false
-    }
-});
-
-// Associations
-User.belongsToMany(Team, { through: 'UserTeam' });
-Team.belongsToMany(User, { through: 'UserTeam' });
-
-Team.hasMany(Customer);
-Customer.belongsTo(Team);
-
-Team.hasMany(Property);
-Property.belongsTo(Team);
-
-User.hasMany(Task);
-Task.belongsTo(User);
-
-const Image = sequelize.define('Image', {
-    path: {
-        type: DataTypes.STRING,
-        allowNull: false
-    }
-});
-
-Property.hasMany(Image);
-Image.belongsTo(Property);
-
-const Interaction = sequelize.define('Interaction', {
-    type: { type: DataTypes.STRING, allowNull: false },
-    date: { type: DataTypes.DATE, allowNull: false },
-    notes: { type: DataTypes.TEXT }
-});
-
-Customer.hasMany(Interaction);
-Interaction.belongsTo(Customer);
-
-User.hasMany(Interaction);
-Interaction.belongsTo(User);
-
+// We are exporting the db object from models/index.js, which contains the sequelize instance
+// and all the models. We are also exporting our custom setup function.
 module.exports = {
-    sequelize,
-    setupVectorExtension,
-    User,
-    Customer,
-    Property,
-    Task,
-    Image,
-    Team,
-    Interaction
+    ...db,
+    setupVectorExtension
 };
