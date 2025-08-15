@@ -1,6 +1,6 @@
 export const api = {
     get: async (url: string, token: string | null) => {
-        const response = await fetch(`http://localhost:3001${url}`, {
+        const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` },
         });
         if (!response.ok) {
@@ -12,7 +12,7 @@ export const api = {
         return response.json();
     },
     post: async (url: string, data: any, token: string | null) => {
-        const response = await fetch(`http://localhost:3001${url}`, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -24,7 +24,7 @@ export const api = {
         return response.json();
     },
     put: async (url: string, data: any, token: string | null) => {
-        const response = await fetch(`http://localhost:3001${url}`, {
+        const response = await fetch(url, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -36,7 +36,7 @@ export const api = {
         return response.json();
     },
     delete: async (url: string, token: string | null) => {
-        const response = await fetch(`http://localhost:3001${url}`, {
+        const response = await fetch(url, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` },
         });
