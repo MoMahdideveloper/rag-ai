@@ -1,8 +1,9 @@
 const { Sequelize, DataTypes } = require('sequelize');
 const { registerTypes } = require('pgvector/sequelize');
 
-const sequelize = new Sequelize('postgres', 'postgres', 'password', {
-    host: 'localhost',
+const sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASS, {
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
     dialect: 'postgres',
     logging: false
 });
@@ -22,7 +23,14 @@ const Customer = sequelize.define('Customer', {
     leadScore: { type: DataTypes.INTEGER },
     leadScoreReasoning: { type: DataTypes.TEXT },
     embedding: { type: DataTypes.VECTOR(384) }
-}, { timestamps: false });
+}, {
+    timestamps: false,
+    indexes: [{
+        fields: ['embedding'],
+        using: 'hnsw',
+        operator: 'vector_cosine_ops'
+    }]
+});
 
 const Property = sequelize.define('Property', {
     title: { type: DataTypes.STRING, allowNull: false },
@@ -38,7 +46,14 @@ const Property = sequelize.define('Property', {
     description: { type: DataTypes.TEXT },
     createdAt: { type: DataTypes.DATE },
     embedding: { type: DataTypes.VECTOR(384) }
-}, { timestamps: false });
+}, {
+    timestamps: false,
+    indexes: [{
+        fields: ['embedding'],
+        using: 'hnsw',
+        operator: 'vector_cosine_ops'
+    }]
+});
 
 const Task = sequelize.define('Task', {
     title: { type: DataTypes.STRING, allowNull: false },
