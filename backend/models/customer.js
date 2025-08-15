@@ -5,6 +5,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       Customer.belongsTo(models.Team);
       Customer.hasMany(models.Interaction);
+      Customer.hasMany(models.Notification);
     }
   }
   Customer.init({

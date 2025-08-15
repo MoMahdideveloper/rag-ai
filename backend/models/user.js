@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       User.belongsToMany(models.Team, { through: 'UserTeam' });
       User.hasMany(models.Task);
       User.hasMany(models.Interaction);
+      User.hasMany(models.Notification);
     }
   }
   User.init({

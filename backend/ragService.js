@@ -61,4 +61,22 @@ const searchSimilarDocuments = async (query, teamId, limit = 5) => {
     return [...customerDocs, ...propertyDocs];
 };
 
-module.exports = { searchSimilarDocuments, getEmbedding, customerToDocument, propertyToDocument };
+const findMatchingCustomers = async (property, teamId, limit = 3) => {
+    if (!property.embedding) {
+        console.error('Property has no embedding. Cannot find matches.');
+        return [];
+    }
+
+    const propertyEmbedding = property.embedding;
+
+    // Find customers in the same team with the closest embeddings
+    const matchingCustomers = await Customer.findAll({
+        where: { TeamId: teamId },
+        order: sequelize.literal(`embedding <=> '${JSON.stringify(propertyEmbedding)}'`),
+        limit: limit
+    });
+
+    return matchingCustomers;
+};
+
+module.exports = { searchSimilarDocuments, getEmbedding, customerToDocument, propertyToDocument, findMatchingCustomers };

@@ -6,8 +6,8 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, setupVectorExtension, User, Customer, Property, Task, Image, Team, Interaction } = require('./database');
-const { searchSimilarDocuments, getEmbedding, customerToDocument, propertyToDocument } = require('./ragService');
+const { sequelize, setupVectorExtension, User, Customer, Property, Task, Image, Team, Interaction, Notification } = require('./database');
+const { searchSimilarDocuments, getEmbedding, customerToDocument, propertyToDocument, findMatchingCustomers } = require('./ragService');
 const { fn, col } = require('sequelize');
 const { sendEmail } = require('./emailService');
 const { getLeadScoreFromAI } = require('./aiService');
@@ -397,6 +397,31 @@ app.post('/api/properties', authenticateToken, isTeamMember, async (req, res) =>
         await newProperty.update({ embedding });
 
         res.status(201).json(newProperty);
+
+        // --- Automated Matching and Notification (Fire-and-forget) ---
+        findMatchingCustomers(newProperty, teamId)
+            .then(async (customers) => {
+                if (customers.length > 0) {
+                    console.log(`Found ${customers.length} matching customer(s) for new property ${newProperty.id}.`);
+                    const team = await Team.findByPk(teamId, { include: User });
+                    if (!team || !team.Users) return;
+
+                    const agents = team.Users;
+                    for (const customer of customers) {
+                        for (const agent of agents) {
+                            const message = `New property at ${newProperty.address} could be a good match for your client ${customer.name}.`;
+                            await Notification.create({
+                                message,
+                                UserId: agent.id,
+                                CustomerId: customer.id,
+                                PropertyId: newProperty.id,
+                            });
+                        }
+                    }
+                }
+            })
+            .catch(err => console.error('Error during automated matching and notification:', err));
+
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -464,6 +489,41 @@ app.post('/api/properties/:propertyId/images', authenticateToken, async (req, re
         res.status(201).json(createdImages);
     });
 });
+
+// Notification routes
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+        const notifications = await Notification.findAll({
+            where: { UserId: req.user.id },
+            order: [['createdAt', 'DESC']],
+            include: [
+                { model: Customer, attributes: ['id', 'name'] },
+                { model: Property, attributes: ['id', 'address'] }
+            ]
+        });
+        res.json(notifications);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    try {
+        const notification = await Notification.findOne({
+            where: { id: req.params.id, UserId: req.user.id }
+        });
+        if (notification) {
+            notification.isRead = true;
+            await notification.save();
+            res.json(notification);
+        } else {
+            res.status(404).send('Notification not found');
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 
 app.delete('/api/images/:imageId', authenticateToken, async (req, res) => {
     try {

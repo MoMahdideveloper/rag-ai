@@ -5,6 +5,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       Property.belongsTo(models.Team);
       Property.hasMany(models.Image);
+      Property.hasMany(models.Notification);
     }
   }
   Property.init({
