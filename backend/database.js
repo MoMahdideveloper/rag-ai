@@ -1,9 +1,16 @@
 const { Sequelize, DataTypes } = require('sequelize');
+const { registerTypes } = require('pgvector/sequelize');
 
-const sequelize = new Sequelize({
-    dialect: 'sqlite',
-    storage: './database.sqlite'
+const sequelize = new Sequelize('postgres', 'postgres', 'password', {
+    host: 'localhost',
+    dialect: 'postgres',
+    logging: false
 });
+
+async function setupVectorExtension() {
+    await sequelize.query('CREATE EXTENSION IF NOT EXISTS vector;');
+    registerTypes(sequelize);
+}
 
 const Customer = sequelize.define('Customer', {
     name: { type: DataTypes.STRING, allowNull: false },
@@ -13,7 +20,8 @@ const Customer = sequelize.define('Customer', {
     createdAt: { type: DataTypes.DATE },
     requirements: { type: DataTypes.JSON },
     leadScore: { type: DataTypes.INTEGER },
-    leadScoreReasoning: { type: DataTypes.TEXT }
+    leadScoreReasoning: { type: DataTypes.TEXT },
+    embedding: { type: DataTypes.VECTOR(384) }
 }, { timestamps: false });
 
 const Property = sequelize.define('Property', {
@@ -28,7 +36,8 @@ const Property = sequelize.define('Property', {
     rent: { type: DataTypes.BIGINT },
     features: { type: DataTypes.JSON },
     description: { type: DataTypes.TEXT },
-    createdAt: { type: DataTypes.DATE }
+    createdAt: { type: DataTypes.DATE },
+    embedding: { type: DataTypes.VECTOR(384) }
 }, { timestamps: false });
 
 const Task = sequelize.define('Task', {
@@ -99,6 +108,7 @@ Interaction.belongsTo(User);
 
 module.exports = {
     sequelize,
+    setupVectorExtension,
     User,
     Customer,
     Property,

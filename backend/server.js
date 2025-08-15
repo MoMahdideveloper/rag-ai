@@ -6,9 +6,9 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, User, Customer, Property, Task, Image, Team, Interaction } = require('./database');
+const { sequelize, setupVectorExtension, User, Customer, Property, Task, Image, Team, Interaction } = require('./database');
+const { searchSimilarDocuments, getEmbedding, customerToDocument, propertyToDocument } = require('./ragService');
 const { fn, col } = require('sequelize');
-const { searchSimilarDocuments } = require('./ragService');
 const { sendEmail } = require('./emailService');
 const { getLeadScoreFromAI } = require('./aiService');
 
@@ -192,8 +192,8 @@ app.get('/api/analytics/timeseries', authenticateToken, isTeamMember, async (req
         const customerSeries = await Customer.findAll({
             where: { TeamId: teamId },
             attributes: [
-                [fn('strftime', '%Y-%m', col('createdAt')), 'month'],
-                [fn('count', col('id')), 'count']
+                [fn('TO_CHAR', col('createdAt'), 'YYYY-MM'), 'month'],
+                [fn('COUNT', col('id')), 'count']
             ],
             group: ['month'],
             order: [['month', 'ASC']]
@@ -213,12 +213,9 @@ app.post('/api/rag-search', authenticateToken, isTeamMember, async (req, res) =>
             return res.status(400).json({ error: 'Query is required' });
         }
 
-        const customers = await Customer.findAll({ where: { TeamId: teamId } });
-        const properties = await Property.findAll({ where: { TeamId: teamId } });
+        const contextDocuments = await searchSimilarDocuments(query, teamId);
 
-        const context = await searchSimilarDocuments(query, customers, properties);
-
-        res.json({ context });
+        res.json({ context: contextDocuments.join('\n\n') });
     } catch (error) {
         console.error('RAG search error:', error);
         res.status(500).json({ error: 'Failed to perform RAG search' });
@@ -257,6 +254,11 @@ app.post('/api/customers', authenticateToken, isTeamMember, async (req, res) => 
         const { teamId, ...customerData } = req.body;
         const newCustomer = await Customer.create({ ...customerData, TeamId: teamId });
 
+        // Generate and save embedding
+        const docText = customerToDocument(newCustomer);
+        const embedding = await getEmbedding(docText);
+        await newCustomer.update({ embedding });
+
         // Fire-and-forget AI scoring
         getLeadScoreFromAI(newCustomer).then(({ score, reasoning }) => {
             if (score !== null) {
@@ -276,6 +278,11 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
         const isMember = await customer.Team.hasUser(req.user.id);
         if (customer && isMember) {
             await customer.update(req.body);
+
+            // Re-generate and save embedding
+            const docText = customerToDocument(customer);
+            const embedding = await getEmbedding(docText);
+            await customer.update({ embedding });
 
             // Fire-and-forget AI scoring
             getLeadScoreFromAI(customer).then(({ score, reasoning }) => {
@@ -383,6 +390,12 @@ app.post('/api/properties', authenticateToken, isTeamMember, async (req, res) =>
     try {
         const { teamId, ...propertyData } = req.body;
         const newProperty = await Property.create({ ...propertyData, TeamId: teamId });
+
+        // Generate and save embedding
+        const docText = propertyToDocument(newProperty);
+        const embedding = await getEmbedding(docText);
+        await newProperty.update({ embedding });
+
         res.status(201).json(newProperty);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -395,6 +408,12 @@ app.put('/api/properties/:id', authenticateToken, async (req, res) => {
         const isMember = await property.Team.hasUser(req.user.id);
         if (property && isMember) {
             await property.update(req.body);
+
+            // Re-generate and save embedding
+            const docText = propertyToDocument(property);
+            const embedding = await getEmbedding(docText);
+            await property.update({ embedding });
+
             res.json(property);
         } else {
             res.status(404).send('Property not found or user not a member of the team');
@@ -517,11 +536,15 @@ const startServer = async () => {
         await sequelize.sync();
         console.log('Database synchronized');
 
+        // اجرای تابع برای فعال‌سازی افزونه
+        await setupVectorExtension();
+        console.log('Vector extension setup complete.');
+
         app.listen(PORT, () => {
             console.log(`Backend server is running on http://localhost:${PORT}`);
         });
     } catch (error) {
-        console.error('Unable to connect to the database:', error);
+        console.error('Unable to start the server:', error);
     }
 };
 
