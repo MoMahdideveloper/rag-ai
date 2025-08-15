@@ -43,6 +43,74 @@ const euclideanDistance = (a, b) => {
     return Math.sqrt(sum);
 };
 
+/**
+ * For a given customer, finds the most similar properties from a list.
+ * @param {object} customer - The customer object to find matches for.
+ * @param {Array<object>} allProperties - An array of all properties to search within.
+ * @param {number} [limit=3] - The max number of similar properties to return.
+ * @returns {Promise<Array<object>>} - A promise that resolves to an array of property objects.
+ */
+const findSimilarProperties = async (customer, allProperties, limit = 3) => {
+    if (!customer || !allProperties || allProperties.length === 0) {
+        return [];
+    }
+
+    // Convert customer requirements to a query string
+    const query = customerToDocument(customer);
+    const queryEmbedding = await getEmbedding(query);
+
+    // Get embeddings for all properties
+    const propertyDocs = allProperties.map(p => ({ property: p, text: propertyToDocument(p) }));
+    const docEmbeddings = await Promise.all(propertyDocs.map(doc => getEmbedding(doc.text)));
+
+    // Calculate similarity
+    const withDistance = propertyDocs.map((doc, i) => ({
+        ...doc,
+        distance: euclideanDistance(queryEmbedding, docEmbeddings[i])
+    }));
+
+    // Sort by distance (lower is better)
+    withDistance.sort((a, b) => a.distance - b.distance);
+
+    // A simple threshold could be applied here if needed, e.g., filter(p => p.distance < 0.8)
+
+    // Return the full property objects
+    return withDistance.slice(0, limit).map(d => d.property);
+};
+
+/**
+ * For a given property, finds the most similar customers from a list.
+ * @param {object} property - The property object to find matches for.
+ * @param {Array<object>} allCustomers - An array of all customers to search within.
+ * @param {number} [limit=5] - The max number of similar customers to return.
+ * @returns {Promise<Array<object>>} - A promise that resolves to an array of customer objects.
+ */
+const findSimilarCustomers = async (property, allCustomers, limit = 5) => {
+    if (!property || !allCustomers || allCustomers.length === 0) {
+        return [];
+    }
+
+    // Convert property details to a query string
+    const query = propertyToDocument(property);
+    const queryEmbedding = await getEmbedding(query);
+
+    // Get embeddings for all customers
+    const customerDocs = allCustomers.map(c => ({ customer: c, text: customerToDocument(c) }));
+    const docEmbeddings = await Promise.all(customerDocs.map(doc => getEmbedding(doc.text)));
+
+    // Calculate similarity
+    const withDistance = customerDocs.map((doc, i) => ({
+        ...doc,
+        distance: euclideanDistance(queryEmbedding, docEmbeddings[i])
+    }));
+
+    // Sort by distance (lower is better)
+    withDistance.sort((a, b) => a.distance - b.distance);
+
+    // Return the full customer objects
+    return withDistance.slice(0, limit).map(d => d.customer);
+};
+
 const searchSimilarDocuments = async (query, customers, properties, limit = 5) => {
     if ((!customers || customers.length === 0) && (!properties || properties.length === 0)) {
         return [];
@@ -72,4 +140,8 @@ const searchSimilarDocuments = async (query, customers, properties, limit = 5) =
     return withDistance.slice(0, limit).map(d => d.text);
 };
 
-module.exports = { searchSimilarDocuments };
+module.exports = {
+    searchSimilarDocuments,
+    findSimilarProperties,
+    findSimilarCustomers,
+};

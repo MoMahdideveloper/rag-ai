@@ -20,7 +20,10 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "p-queue": "^8.1.0",
+    "p-retry": "^6.2.1",
     "sequelize": "^6.37.7",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "twilio": "^5.8.0"
   }
 }

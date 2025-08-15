@@ -55,6 +55,22 @@ const User = sequelize.define('User', {
     }
 });
 
+const SmsProvider = sequelize.define('SmsProvider', {
+    name: { type: DataTypes.STRING, allowNull: false },
+    apiKey: { type: DataTypes.STRING, allowNull: false },
+    apiSecret: { type: DataTypes.STRING, allowNull: false },
+    senderNumber: { type: DataTypes.STRING, allowNull: false },
+    isActive: { type: DataTypes.BOOLEAN, defaultValue: false }
+});
+
+const NotificationLog = sequelize.define('NotificationLog', {
+    recipient: { type: DataTypes.STRING, allowNull: false },
+    body: { type: DataTypes.TEXT, allowNull: false },
+    status: { type: DataTypes.STRING, allowNull: false }, // e.g., 'sent', 'failed'
+    provider: { type: DataTypes.STRING },
+    error: { type: DataTypes.TEXT }
+});
+
 const Team = sequelize.define('Team', {
     name: {
         type: DataTypes.STRING,
@@ -66,11 +82,20 @@ const Team = sequelize.define('Team', {
 User.belongsToMany(Team, { through: 'UserTeam' });
 Team.belongsToMany(User, { through: 'UserTeam' });
 
+Team.hasMany(SmsProvider);
+SmsProvider.belongsTo(Team);
+
 Team.hasMany(Customer);
 Customer.belongsTo(Team);
 
 Team.hasMany(Property);
 Property.belongsTo(Team);
+
+User.hasMany(Customer);
+Customer.belongsTo(User);
+
+User.hasMany(Property);
+Property.belongsTo(User);
 
 User.hasMany(Task);
 Task.belongsTo(User);
@@ -97,6 +122,16 @@ Interaction.belongsTo(Customer);
 User.hasMany(Interaction);
 Interaction.belongsTo(User);
 
+// NotificationLog Associations
+Team.hasMany(NotificationLog);
+NotificationLog.belongsTo(Team);
+
+Customer.hasMany(NotificationLog);
+NotificationLog.belongsTo(Customer);
+
+Property.hasMany(NotificationLog);
+NotificationLog.belongsTo(Property);
+
 module.exports = {
     sequelize,
     User,
@@ -105,5 +140,7 @@ module.exports = {
     Task,
     Image,
     Team,
-    Interaction
+    Interaction,
+    SmsProvider,
+    NotificationLog
 };

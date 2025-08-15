@@ -6,11 +6,14 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { sequelize, User, Customer, Property, Task, Image, Team, Interaction } = require('./database');
+const { sequelize, User, Customer, Property, Task, Image, Team, Interaction, NotificationLog, SmsProvider } = require('./database');
 const { fn, col } = require('sequelize');
 const { searchSimilarDocuments } = require('./ragService');
 const { sendEmail } = require('./emailService');
 const { getLeadScoreFromAI } = require('./aiService');
+const { addTask } = require('./queueService');
+const { findMatchingProperties, findMatchingCustomers } = require('./matchingService');
+const { sendSms } = require('./smsService');
 
 const app = express();
 const PORT = 3001;
@@ -158,6 +161,134 @@ app.post('/api/teams/:teamId/invite', authenticateToken, async (req, res) => {
     }
 });
 
+// SMS Provider Management Routes
+app.get('/api/teams/:teamId/sms-providers', authenticateToken, isTeamMember, async (req, res) => {
+    try {
+        const providers = await SmsProvider.findAll({ where: { TeamId: req.params.teamId } });
+        res.json(providers);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/teams/:teamId/sms-providers', authenticateToken, isTeamMember, async (req, res) => {
+    try {
+        const { name, apiKey, apiSecret, senderNumber } = req.body;
+        const { teamId } = req.params;
+
+        if (req.body.isActive) {
+            await SmsProvider.update({ isActive: false }, { where: { TeamId: teamId } });
+        }
+
+        const newProvider = await SmsProvider.create({
+            name,
+            apiKey,
+            apiSecret,
+            senderNumber,
+            isActive: req.body.isActive || false,
+            TeamId: teamId,
+        });
+        res.status(201).json(newProvider);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/sms-providers/:providerId', authenticateToken, async (req, res) => {
+    try {
+        const { providerId } = req.params;
+        const provider = await SmsProvider.findByPk(providerId);
+
+        if (!provider) {
+            return res.status(404).json({ error: 'SMS Provider not found' });
+        }
+
+        const user = await User.findByPk(req.user.id, { include: Team });
+        const isMember = user.Teams.some(team => team.id == provider.TeamId);
+        if (!isMember) {
+            return res.status(403).json({ error: 'User is not a member of this team' });
+        }
+
+        if (req.body.isActive) {
+            await SmsProvider.update({ isActive: false }, { where: { TeamId: provider.TeamId } });
+        }
+
+        const { name, apiKey, apiSecret, senderNumber, isActive } = req.body;
+        const updatedProvider = await provider.update({ name, apiKey, apiSecret, senderNumber, isActive });
+
+        res.json(updatedProvider);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/sms-providers/:providerId', authenticateToken, async (req, res) => {
+    try {
+        const { providerId } = req.params;
+        const provider = await SmsProvider.findByPk(providerId);
+
+        if (!provider) {
+            return res.status(404).json({ error: 'SMS Provider not found' });
+        }
+
+        const user = await User.findByPk(req.user.id, { include: Team });
+        const isMember = user.Teams.some(team => team.id == provider.TeamId);
+        if (!isMember) {
+            return res.status(403).json({ error: 'User is not a member of this team' });
+        }
+
+        await provider.destroy();
+        res.status(204).send();
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Notification Log Routes
+app.get('/api/customers/:customerId/notifications', authenticateToken, async (req, res) => {
+    try {
+        const customer = await Customer.findByPk(req.params.customerId, { include: Team });
+        if (!customer) {
+            return res.status(404).send('Customer not found');
+        }
+
+        const isMember = await customer.Team.hasUser(req.user.id);
+        if (!isMember) {
+            return res.status(403).json({ error: 'User is not a member of this team' });
+        }
+
+        const notifications = await NotificationLog.findAll({
+            where: { CustomerId: req.params.customerId },
+            order: [['createdAt', 'DESC']],
+        });
+        res.json(notifications);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/properties/:propertyId/notifications', authenticateToken, async (req, res) => {
+    try {
+        const property = await Property.findByPk(req.params.propertyId, { include: Team });
+        if (!property) {
+            return res.status(404).send('Property not found');
+        }
+
+        const isMember = await property.Team.hasUser(req.user.id);
+        if (!isMember) {
+            return res.status(403).json({ error: 'User is not a member of this team' });
+        }
+
+        const notifications = await NotificationLog.findAll({
+            where: { PropertyId: req.params.propertyId },
+            order: [['createdAt', 'DESC']],
+        });
+        res.json(notifications);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Analytics Routes
 app.get('/api/analytics/summary', authenticateToken, isTeamMember, async (req, res) => {
     try {
@@ -255,14 +386,50 @@ app.get('/api/customers/:id', authenticateToken, async (req, res) => {
 app.post('/api/customers', authenticateToken, isTeamMember, async (req, res) => {
     try {
         const { teamId, ...customerData } = req.body;
-        const newCustomer = await Customer.create({ ...customerData, TeamId: teamId });
+        const newCustomer = await Customer.create({ ...customerData, TeamId: teamId, UserId: req.user.id });
 
-        // Fire-and-forget AI scoring
+        // Fire-and-forget AI scoring and matching
         getLeadScoreFromAI(newCustomer).then(({ score, reasoning }) => {
             if (score !== null) {
                 newCustomer.update({ leadScore: score, leadScoreReasoning: reasoning });
             }
         }).catch(err => console.error("AI Scoring failed:", err));
+
+        // Enqueue background task for matching and notification
+        addTask(async () => {
+            const matchedProperties = await findMatchingProperties(newCustomer);
+            if (matchedProperties && matchedProperties.length > 0) {
+                console.log(`Found ${matchedProperties.length} matching properties for customer ${newCustomer.id}`);
+                const messageBody = "خبر خوب! ملکی مناسب با درخواست شما پیدا شد. مشاور شما به زودی تماس خواهد گرفت.";
+
+                const smsResult = await sendSms(newCustomer.TeamId, newCustomer.phoneNumber, messageBody);
+
+                await NotificationLog.create({
+                    recipient: newCustomer.phoneNumber,
+                    body: messageBody,
+                    status: smsResult.success ? 'sent' : 'failed',
+                    provider: smsResult.providerName,
+                    error: smsResult.success ? null : smsResult.error,
+                    TeamId: newCustomer.TeamId,
+                    CustomerId: newCustomer.id,
+                    PropertyId: matchedProperties[0].id, // Link to the first matched property
+                });
+
+                if (smsResult.success) {
+                    const dueDate = new Date();
+                    dueDate.setDate(dueDate.getDate() + 1);
+
+                    await Task.create({
+                        title: `پیگیری پیامک ارسال شده به ${newCustomer.name}`,
+                        dueDate: dueDate.toISOString().split('T')[0],
+                        priority: 'Medium',
+                        isCompleted: false,
+                        UserId: newCustomer.UserId,
+                        CustomerId: newCustomer.id,
+                    });
+                }
+            }
+        });
 
         res.status(201).json(newCustomer);
     } catch (error) {
@@ -277,12 +444,48 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
         if (customer && isMember) {
             await customer.update(req.body);
 
-            // Fire-and-forget AI scoring
+            // Fire-and-forget AI scoring and matching
             getLeadScoreFromAI(customer).then(({ score, reasoning }) => {
                 if (score !== null) {
                     customer.update({ leadScore: score, leadScoreReasoning: reasoning });
                 }
             }).catch(err => console.error("AI Scoring failed:", err));
+
+            // Enqueue background task for matching and notification
+            addTask(async () => {
+                const matchedProperties = await findMatchingProperties(customer);
+                if (matchedProperties && matchedProperties.length > 0) {
+                    console.log(`Found ${matchedProperties.length} matching properties for customer ${customer.id}`);
+                    const messageBody = "خبر خوب! ملکی مناسب با درخواست شما پیدا شد. مشاور شما به زودی تماس خواهد گرفت.";
+
+                    const smsResult = await sendSms(customer.TeamId, customer.phoneNumber, messageBody);
+
+                    await NotificationLog.create({
+                        recipient: customer.phoneNumber,
+                        body: messageBody,
+                        status: smsResult.success ? 'sent' : 'failed',
+                        provider: smsResult.providerName,
+                        error: smsResult.success ? null : smsResult.error,
+                        TeamId: customer.TeamId,
+                        CustomerId: customer.id,
+                        PropertyId: matchedProperties[0].id,
+                    });
+
+                    if (smsResult.success) {
+                        const dueDate = new Date();
+                        dueDate.setDate(dueDate.getDate() + 1);
+
+                        await Task.create({
+                            title: `پیگیری پیامک ارسال شده به ${customer.name}`,
+                            dueDate: dueDate.toISOString().split('T')[0],
+                            priority: 'Medium',
+                            isCompleted: false,
+                            UserId: customer.UserId,
+                            CustomerId: customer.id,
+                        });
+                    }
+                }
+            });
 
             res.json(customer);
         } else {
@@ -382,7 +585,46 @@ app.get('/api/properties/:id', authenticateToken, async (req, res) => {
 app.post('/api/properties', authenticateToken, isTeamMember, async (req, res) => {
     try {
         const { teamId, ...propertyData } = req.body;
-        const newProperty = await Property.create({ ...propertyData, TeamId: teamId });
+        const newProperty = await Property.create({ ...propertyData, TeamId: teamId, UserId: req.user.id });
+
+        // Enqueue background task for matching and notification
+        addTask(async () => {
+            const matchedCustomers = await findMatchingCustomers(newProperty);
+            if (matchedCustomers && matchedCustomers.length > 0) {
+                console.log(`Found ${matchedCustomers.length} matching customers for property ${newProperty.id}`);
+
+                for (const customer of matchedCustomers) {
+                    const messageBody = `مژده! مشتری مناسبی برای ملک شما با عنوان '${newProperty.title}' پیدا شد.`;
+                    const smsResult = await sendSms(newProperty.TeamId, customer.phoneNumber, messageBody);
+
+                    await NotificationLog.create({
+                        recipient: customer.phoneNumber,
+                        body: messageBody,
+                        status: smsResult.success ? 'sent' : 'failed',
+                        provider: smsResult.providerName,
+                        error: smsResult.success ? null : smsResult.error,
+                        TeamId: newProperty.TeamId,
+                        CustomerId: customer.id,
+                        PropertyId: newProperty.id,
+                    });
+
+                    if (smsResult.success) {
+                        const dueDate = new Date();
+                        dueDate.setDate(dueDate.getDate() + 1);
+
+                        await Task.create({
+                            title: `پیگیری با ${customer.name} برای ملک '${newProperty.title}'`,
+                            dueDate: dueDate.toISOString().split('T')[0],
+                            priority: 'Medium',
+                            isCompleted: false,
+                            UserId: customer.UserId, // Task for the customer's agent
+                            CustomerId: customer.id,
+                        });
+                    }
+                }
+            }
+        });
+
         res.status(201).json(newProperty);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -395,6 +637,45 @@ app.put('/api/properties/:id', authenticateToken, async (req, res) => {
         const isMember = await property.Team.hasUser(req.user.id);
         if (property && isMember) {
             await property.update(req.body);
+
+            // Enqueue background task for matching and notification
+            addTask(async () => {
+                const matchedCustomers = await findMatchingCustomers(property);
+                if (matchedCustomers && matchedCustomers.length > 0) {
+                    console.log(`Found ${matchedCustomers.length} matching customers for property ${property.id}`);
+
+                    for (const customer of matchedCustomers) {
+                        const messageBody = `مژده! مشتری مناسبی برای ملک شما با عنوان '${property.title}' پیدا شد.`;
+                        const smsResult = await sendSms(property.TeamId, customer.phoneNumber, messageBody);
+
+                        await NotificationLog.create({
+                            recipient: customer.phoneNumber,
+                            body: messageBody,
+                            status: smsResult.success ? 'sent' : 'failed',
+                            provider: smsResult.providerName,
+                            error: smsResult.success ? null : smsResult.error,
+                            TeamId: property.TeamId,
+                            CustomerId: customer.id,
+                            PropertyId: property.id,
+                        });
+
+                        if (smsResult.success) {
+                            const dueDate = new Date();
+                            dueDate.setDate(dueDate.getDate() + 1);
+
+                            await Task.create({
+                                title: `پیگیری با ${customer.name} برای ملک '${property.title}'`,
+                                dueDate: dueDate.toISOString().split('T')[0],
+                                priority: 'Medium',
+                                isCompleted: false,
+                                UserId: customer.UserId, // Task for the customer's agent
+                                CustomerId: customer.id,
+                            });
+                        }
+                    }
+                }
+            });
+
             res.json(property);
         } else {
             res.status(404).send('Property not found or user not a member of the team');
